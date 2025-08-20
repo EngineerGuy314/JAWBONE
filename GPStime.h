@@ -1,12 +1,3 @@
-/////////////////////////////////////////////////////////////////////////////
-//  Majority of code forked from work by
-//  Roman Piksaykin [piksaykin@gmail.com], R2BDY
-//  https://www.qrz.com/db/r2bdy
-//  PROJECT PAGE
-//  https://github.com/RPiks/pico-WSPR-tx
-///////////////////////////////////////////////////////////////////////////////
-#ifndef GPSTIME_H_
-#define GPSTIME_H_
 
 #include <stdint.h>
 #include <stdio.h>
@@ -16,7 +7,6 @@
 #include "pico/stdlib.h"
 #include "hardware/uart.h"
 #include "defines.h"
-#include "utility.h"
 
 
 
@@ -63,4 +53,32 @@ void RAM (GPStimePPScallback)(uint gpio, uint32_t events);
 void RAM (GPStimeUartRxIsr)();
 void GPStimeDump(const GPStimeData *pd);
 
-#endif
+inline uint64_t GetUptime64(void)
+{
+    const uint32_t lo = timer_hw->timelr;
+    const uint32_t hi = timer_hw->timehr;
+
+    return ((uint64_t)hi << 32U) | lo;
+}
+
+inline uint32_t GetTime32(void)
+{
+    return timer_hw->timelr;
+}
+
+inline uint32_t PicoU64timeToSeconds(uint64_t u64tm)
+{
+    return u64tm / 1000000U;    // No rounding deliberately!
+}
+
+inline uint32_t DecimalStr2ToNumber(const char *p)
+{
+    return 10U * (p[0] - '0') + (p[1] - '0');
+}
+
+inline void PRN32(uint32_t *val)
+{ 
+    *val ^= *val << 13;
+    *val ^= *val >> 17;
+    *val ^= *val << 5;
+}

@@ -16,15 +16,6 @@
 #include "TxChannel.h"
 
 
-static TxChannelContext *spOsc = NULL;
-
-/**
- * @brief Improoved user input function
- * 
- * @param prompt Prompt to display to user 
- * @param input_variable Variable to which we want to read input
- * @param max_length Maximum length of input string
- */
 void get_user_input(const char *prompt, char *input_variable, int max_length) {
     int index = 0;
     int ch;

@@ -1,6 +1,3 @@
-build-dev/
-dox-dev/ 
-.vscode/
 build/*
-!build/pico-WSPRer.uf2
+!build/JAWBONE.uf2
 CMakeCache.txt
