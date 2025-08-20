@@ -31,7 +31,6 @@ target_sources(JAWBONE PUBLIC
 			   ${CMAKE_CURRENT_LIST_DIR}/pico_fractional_pll.c
                ${CMAKE_CURRENT_LIST_DIR}/GPStime.c
                ${CMAKE_CURRENT_LIST_DIR}/TxChannel.c
-               ${CMAKE_CURRENT_LIST_DIR}/maidenhead.c
                ${CMAKE_CURRENT_LIST_DIR}/WSPRbeacon.c
                ${CMAKE_CURRENT_LIST_DIR}/onewire/onewire_library.c  
                ${CMAKE_CURRENT_LIST_DIR}/main.c 

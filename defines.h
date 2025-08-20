@@ -121,6 +121,10 @@
 #include "hardware/pio.h"
 #include "hardware/structs/pll.h"
 #include "hardware/pll.h"
+#include <stdint.h>
+#include <string.h>
+#include <ctype.h>
+#include <math.h>
 
 		
 ////////////    Data type definition /////////////////////////////
