@@ -129,27 +129,7 @@
 		
 ////////////    Data type definition /////////////////////////////
 
-//from pico fractional MARKED FOR DELETION
-/*typedef struct pico_fractional_pll_instance_t {                          
-  // do not change this block, referred from the assembly code
-  PLL pll;
-  uint32_t acc_increment;
-  uint32_t fbdiv_low;
 
-  uint gpio;
-  uint gpclk;
-  uint srcclk;
-  enum gpio_drive_strength drive_strength;
-  enum gpio_slew_rate slew_rate;
-  uint32_t freq_low;
-  uint32_t freq_high;
-  uint32_t fbdiv_high;
-  uint32_t div;
-  uint32_t postdiv1;
-  uint32_t postdiv2;
-  uint32_t clkdiv;
-  uint32_t freq_delta;
-} pico_fractional_pll_instance_t;*/
 
 //gps time
 

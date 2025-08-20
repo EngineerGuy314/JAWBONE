@@ -1,7 +1,7 @@
 /////////////////////////////////////////////////////////////////////////////
 //
 //  PROJECT PAGE
-//  https://github.com/EngineerGuy314/pico-WSPRer
+//  https://github.com/EngineerGuy314/JAWBONE
 //
 //  Much of the code forked from work by
 //  Roman Piksaykin [piksaykin@gmail.com], R2BDY
@@ -50,7 +50,7 @@ static absolute_time_t LED_sequence_start_time;
 static int GPS_PPS_PIN;     //these get set based on values in defines.h, and also if custom PCB selected in user menu
 int RFOUT_PIN;            //will be fixed at 21 to use Kazu's fraction-pll
 static int GPS_ENABLE_PIN;
-int PLL_SYS_MHZ;
+int Main_System_Clock_Speed;
 uint gpio_for_onewire;
 int force_transmit = 0;
 uint32_t fader; //for creating "breathing" effect on LED to indicate corruption of NVRAM
@@ -83,6 +83,7 @@ int main()
 			gpio_put(LED_PIN, 0);
 			sleep_ms(100);
 		}
+
 	read_NVRAM();				//reads values of _callsign,  _verbosity etc from NVRAM. MUST READ THESE *BEFORE* InitPicoPins
 	if (check_data_validity()==-1)  //if data was bad, breathe LED for 10 seconds and reboot. or if user presses a key enter setup
 		{
@@ -113,12 +114,11 @@ int main()
 		user_interface();   
 		}
 		
-	set_sys_clock_48mhz();	// deinit pll_sys and only use pll_usb        -Jan 2025 found that this MUST be done *before* enabling Dallas sensor stuff
+	set_sys_clock_khz( Main_System_Clock_Speed* 1000, true);
+	
 	InitPicoPins();			// Sets GPIO pins roles and directions and also ADC for voltage and temperature measurements (NVRAM must be read BEFORE this, otherwise dont know how to map IO)
 	I2C_init();
-    printf("\nThe pico-WSPRer version: %s %s\nWSPR beacon init...",__DATE__ ,__TIME__);	//messages are sent to USB serial port, 115200 baud
-
-
+    printf("\nThe JAWBONE version: %s %s\nWSPR beacon init...",__DATE__ ,__TIME__);	//messages are sent to USB serial port, 115200 baud
 	int band_as_int=_band[0]-'A';   
 	XMIT_FREQUENCY=freqs[band_as_int];
 	switch(_lane[0])                             //following lines set lane frequencies for u4b operation. The center freuency for Zactkep (wspr 3) xmitions is hard set in WSPRBeacon.c to 14097100UL
@@ -152,7 +152,7 @@ int main()
 	pWB->_txSched.low_power_mode=(uint8_t)_battery_mode[0]-'0';
 	strcpy(pWB->_txSched.id13,_id13);
 	int uart_number=(uint8_t)_custom_PCB[0]-'0';  //custom PCB uses Uart 1 if selected, otherwise uart 0
-	RfGen._pGPStime = GPStimeInit(uart_number, 9600, PLL_SYS_MHZ); //the 0 defines uart0, so the RX is GPIO 1 (pin 2 on pico). TX to GPS module not needed
+	RfGen._pGPStime = GPStimeInit(uart_number, 9600, Main_System_Clock_Speed); //the 0 defines uart0, so the RX is GPIO 1 (pin 2 on pico). TX to GPS module not needed
 	RfGen._pGPStime->user_setup_menu_active=0;
 	RfGen._pGPStime->forced_XMIT_on=force_transmit;
 	RfGen._pGPStime->verbosity=(uint8_t)_verbosity[0]-'0';   
@@ -382,17 +382,24 @@ printf(CURSOR_HOME);
 printf(BRIGHT);
 printf("\n\n\n\n\n\n\n\n\n\n\n\n");
 printf("================================================================================\n\n");printf(UNDERLINE_ON);
-printf("Pico-WSPRer (pico whisper-er) by KC3LBR,  version: %s %s\n\n",__DATE__ ,__TIME__);printf(UNDERLINE_OFF);printf(NORMAL); 
-printf("Instructions and source: https://github.com/EngineerGuy314/pico-WSPRer\n");
+printf("JAWBONE (Just Another Wspr Beacon Of Noisy Electronics) by KC3LBR,  version: %s %s\n\n",__DATE__ ,__TIME__);printf(UNDERLINE_OFF);printf(NORMAL); 
+printf("Instructions and source: https://github.com/EngineerGuy314/JAWBONE\n");
 printf("Originally forked from : https://github.com/RPiks/pico-WSPR-tx\n");
-printf("RF Gen code by: Kaduhi https://github.com/kaduhi/pico-fractional-pll\n");
 printf("Additional functions, fixes and documention by https://github.com/serych\n");
 printf("Consult https://traquito.github.io/channelmap/ to find and reserve an open channel \n\n");printf(BRIGHT);printf(UNDERLINE_ON);
 printf("BAND ENUMERATION:\n");printf(UNDERLINE_OFF);
 printf("(default is 'H' 20 Meter) F:40,G:30,H:20,I:17,J:15,K:12,L:10,M:6 \n");
-printf(" The only officially tested band is 20Meter ('H') !! all others are use at your own risk \n\n");
-printf("---WARNING!--- For bands other than H (20M) and L (10M) you may need to use a different U4B channel to get the starting minute you want!!\n");
-printf("---WARNING!--- if using a custom PCB you must change custom-Pcb-mode to 1 !!!!\n\n");
+printf("---WARNING!--- For bands other than H (20M)  you may need to use a different U4B channel to get the starting minute you want!!\n\n");
+
+
+
+printf("System clock: %.2f MHz (defaults to 125Mhz if interrrupted boot process) \n", clock_get_hz(clk_sys)/1000000.0);
+printf("USB clock: %.2f MHz\n", clock_get_hz(clk_usb)/1000000.0);
+printf("ADC clock: %.2f MHz\n", clock_get_hz(clk_adc)/1000000.0);
+printf("rtc clock: %.4f MHz\n", clock_get_hz(clk_rtc)/1000000.0);
+printf("ref clock: %.2f MHz\n", clock_get_hz(clk_ref)/1000000.0);
+printf("Peri clock: %.2f MHz (UART,I2C, etc) GETS FORCED by the SDK TO 48MHZ whenever main sys is changed, because of reasons Grok cant explain\n", clock_get_hz(clk_peri)/1000000.0);
+
 
 printf("\n================================================================================\n");
 
@@ -408,6 +415,7 @@ printf(BRIGHT);
 printf("\n\n\n\n");printf(UNDERLINE_ON);
 printf("DEXT (Doug's EXtended Telemetry) CONFIG INSTRUCTIONS:\n\n");printf(UNDERLINE_OFF);
 printf(NORMAL); 
+printf("\n (DEXT is also known as community driven Extended Telemetry )\n\n");
 printf("* There are 3 possible DEXT values, corresponding to DEXT slots 2,3 and 4,\n");
 printf("  (Slots 0 and 1 are used by WSPR Type 1 and U4B Basic Telemetry)\n");
 printf("  DEXT slot 2 type, DEXT slot 3 type and DEXT slot 4 type.\n");
@@ -485,7 +493,7 @@ show_values();          /* shows current VALUES  AND list of Valid Commands */
 							write_NVRAM(); 
 						break;*/
 
-			//case 'K':get_user_input("Klock speed - DEPRECATED!: ", _Klock_speed, sizeof(_Klock_speed)); write_NVRAM(); break;
+			case 'K':get_user_input("Klock speed: ", _Klock_speed, sizeof(_Klock_speed)); write_NVRAM(); break;
 			
 			case 'F':
 				printf("Fixed Frequency output (antenna tuning mode). Enter frequency (for example 14.097) or 0 for exit.\n\t");
@@ -533,7 +541,7 @@ strncpy(_custom_PCB, flash_target_contents+13, 1);
 strncpy(_DEXT_config, flash_target_contents+14, 4); //only needs 3, kept at 4 for historical ease
 strncpy(_battery_mode, flash_target_contents+18, 1);
 strncpy(_Klock_speed, flash_target_contents+19, 3); _Klock_speed[3]=0; //null terminate cause later will use atoi
-PLL_SYS_MHZ =48;   //hardcoded for Kazu PLL method //atoi(_Klock_speed); 
+Main_System_Clock_Speed = atoi(_Klock_speed);  // was hardcoded for Kazu PLL method at 48
 strncpy(_Datalog_mode, flash_target_contents+22, 1);
 strncpy(_U4B_chan, flash_target_contents+23, 3); _U4B_chan[3]=0; //null terminate cause later will use atoi
 strncpy(_band_hop, flash_target_contents+26, 1);
@@ -592,7 +600,7 @@ void check_data_validity_and_set_defaults(void)
 	if ( (_custom_PCB[0]<'0') || (_custom_PCB[0]>'1')) {_custom_PCB[0]='0'; write_NVRAM();} //set default IO mapping to original Pi Pico configuration
 	if ( (_DEXT_config[0]<'0') || (_DEXT_config[0]>'F')) {strncpy(_DEXT_config,"---",3); write_NVRAM();}
 	if ( (_battery_mode[0]<'0') || (_battery_mode[0]>'1')) {_battery_mode[0]='0'; write_NVRAM();} //
-	if ( (atoi(_Klock_speed)<100) || (atoi(_Klock_speed)>300)) {strcpy(_Klock_speed,"115"); write_NVRAM();} 
+	if ( (atoi(_Klock_speed)<5) || (atoi(_Klock_speed)>300)) {strcpy(_Klock_speed,"114"); write_NVRAM();} 
 	if ( (atoi(_U4B_chan)<0) || (atoi(_U4B_chan)>599)) {strcpy(_U4B_chan,"599"); write_NVRAM();} 
 	if ( (_Datalog_mode[0]!='0') && (_Datalog_mode[0]!='1') && (_Datalog_mode[0]!='D') && (_Datalog_mode[0]!='W')) {_Datalog_mode[0]='0'; write_NVRAM();}
 	if ( (_band_hop[0]<'0') || (_band_hop[0]>'1')) {_band_hop[0]='0'; write_NVRAM();} //
@@ -601,7 +609,6 @@ void check_data_validity_and_set_defaults(void)
 //certain modes have been hidden. following lines make sure they are not accidentally enabled from data corruption
 _oscillator[0]='1';
 _battery_mode[0]='0';
-strcpy(_Klock_speed,"115");
 _Datalog_mode[0]='0';
 _band_hop[0]='0'; 
 
@@ -626,7 +633,7 @@ int result=1;
 	if ( (_custom_PCB[0]<'0') || (_custom_PCB[0]>'1')) {result=-1;} 
 	if ( ((_DEXT_config[0]<'0') || (_DEXT_config[0]>'F'))&& (_DEXT_config[0]!='-')) {result=-1;}
 	if ( (_battery_mode[0]<'0') || (_battery_mode[0]>'1')) {result=-1;} 	
-	if ( (atoi(_Klock_speed)<100) || (atoi(_Klock_speed)>300)) {result=-1;} 	
+	if ( (atoi(_Klock_speed)<5) || (atoi(_Klock_speed)>300)) {result=-1;} 	
 	if ( (_Datalog_mode[0]!='0') && (_Datalog_mode[0]!='1')) {result=-1;}
 	if ( (atoi(_U4B_chan)<0) || (atoi(_U4B_chan)>599)) {result=-1;} 
 	if ( (_band_hop[0]<'0') || (_band_hop[0]>'1')) {result=-1;} 
@@ -646,7 +653,7 @@ check_data_validity_and_set_defaults(); //added may 2025, will this cause proble
 
 int band_as_int=_band[0]-'A';       
 printf(CLEAR_SCREEN);
-printf("Pico-WSPRer (pico whisper-er) by KC3LBR,  version: %s %s\n\n",__DATE__ ,__TIME__);
+printf("JAWBONE (Just Another Wspr Beacon Of Noisy Electronics) by KC3LBR,  version: %s %s\n\n",__DATE__ ,__TIME__);
 printf(UNDERLINE_ON);printf(BRIGHT);
 printf("\n\nCurrent values:\n");printf(UNDERLINE_OFF);printf(NORMAL);
 
@@ -660,9 +667,9 @@ printf("Band:%s (%d Hz)\n\t",_band,freqs[band_as_int]);
 printf("Verbosity:%s\n\t",_verbosity);
 /*printf("Oscillator Off:%s\n\t",_oscillator);*/
 printf("custom Pcb IO mappings:%s\n\t",_custom_PCB);
-printf("Telemetry config:%s   (please set to '---' if unused)\n",_DEXT_config);
-/*printf("Klock speed -DEPRECATED! :%sMhz  (default: 133)\n\t",_Klock_speed);
-printf("Datalog mode:%s\n\t",_Datalog_mode);
+printf("Telemetry config:%s   (please set to '---' if unused)\n\t",_DEXT_config);
+printf("Klock speed (temp) :%sMhz  \n",_Klock_speed);
+/*printf("Datalog mode:%s\n\t",_Datalog_mode);
 printf("Battery (low power) mode:%s\n\t",_battery_mode);
 printf("secret band Hopping mode:%s\n\n",_band_hop);*/
 
@@ -679,7 +686,7 @@ printf("V: Verbosity level (0 for no messages, 9 for too many) \n\t");
 /*printf("O: Oscillator off after trasmission (default: 1) \n\t");*/
 printf("P: custom Pcb mode IO mappings (0,1)\n\t");
 printf("T: Telemetry (dexT) config\n\t");
-//printf("K: Klock speed  (default: 133)\n\t");
+printf("K: Klock speed  \n\t");
 //printf("D: Datalog mode (0,1,(W)ipe memory, (D)ump memory) see wiki\n\t");
 //printf("B: Battery (low power) mode \n\t");
 printf("F: Frequency output (antenna tuning mode)\n\t");
