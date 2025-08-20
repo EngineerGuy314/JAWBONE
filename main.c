@@ -60,9 +60,9 @@ uint64_t OW_romcodes[10];
 float onewire_values[10];
 int number_of_onewire_devs;
 OW one_wire_interface;   //onewire interface
+RfGenStruct RfGen = {0};
 static float volts=0;
 static float tempC=0;
-PioDco DCO = {0};
 uint32_t XMIT_FREQUENCY;
 uint32_t XMIT_FREQUENCY_10_METER;  //deprecated
 const uint32_t freqs[14] =   							//A:LF,B:MF,C:160,D:80,E:60,F:40,G:30,H:20,I:17,J:15,K:12,L:10,M:6,N:2 
@@ -77,39 +77,39 @@ int main()
 	gpio_set_dir(LED_PIN, GPIO_OUT); //initialize LED output
 		
 	for (int i=0;i < 20;i++)     //do some blinky on startup, allows time for power supply to stabilize before GPS unit enabled
-	{
-        gpio_put(LED_PIN, 1); 
-        sleep_ms(100);
-        gpio_put(LED_PIN, 0);
-		sleep_ms(100);
-	}
+		{
+			gpio_put(LED_PIN, 1); 
+			sleep_ms(100);
+			gpio_put(LED_PIN, 0);
+			sleep_ms(100);
+		}
 	read_NVRAM();				//reads values of _callsign,  _verbosity etc from NVRAM. MUST READ THESE *BEFORE* InitPicoPins
-if (check_data_validity()==-1)  //if data was bad, breathe LED for 10 seconds and reboot. or if user presses a key enter setup
-	{
-	printf("\nBAD values in NVRAM detected! will reboot in 10 seconds... press any key to enter user-setup menu..\n");
-	fader=0;fade_counter=0;
-			while (getchar_timeout_us(0)==PICO_ERROR_TIMEOUT) //looks for input on USB serial port only @#$%^&!! they changed this function in SDK 2.0!. used to use -1 for no input, now its -2 PICO_ERROR_TIMEOUT
-			{
-			 fader+=1;
-			 if ((fader%5000)>(fader/100))
-			 gpio_put(LED_PIN, 1); 
-				else
-			 gpio_put(LED_PIN, 0);	
-			 if (fader>500000) 
+	if (check_data_validity()==-1)  //if data was bad, breathe LED for 10 seconds and reboot. or if user presses a key enter setup
+		{
+		printf("\nBAD values in NVRAM detected! will reboot in 10 seconds... press any key to enter user-setup menu..\n");
+		fader=0;fade_counter=0;
+				while (getchar_timeout_us(0)==PICO_ERROR_TIMEOUT) //looks for input on USB serial port only @#$%^&!! they changed this function in SDK 2.0!. used to use -1 for no input, now its -2 PICO_ERROR_TIMEOUT
 				{
-					fader=0;
-					fade_counter+=1;
+				 fader+=1;
+				 if ((fader%5000)>(fader/100))
+				 gpio_put(LED_PIN, 1); 
+					else
+				 gpio_put(LED_PIN, 0);	
+				 if (fader>500000) 
+					{
+						fader=0;
+						fade_counter+=1;
 						if (fade_counter>10) {watchdog_enable(100, 1);for(;;)	{} } //after ~10 secs force a reboot
-				}
-			}	
-		DCO._pGPStime->user_setup_menu_active=1;	//if we get here, they pressed a button
-		user_interface();  
-	}
+					}
+				}	
+			RfGen._pGPStime->user_setup_menu_active=1;	//if we get here, they pressed a button
+			user_interface();  
+		}
 	process_chan_num(); //sets minute/lane/id from chan number. usually redundant at this point, but can't hurt
 	
 	if (getchar_timeout_us(0)>0)   //looks for input on USB serial port only. Note: getchar_timeout_us(0) returns a -2 (as of sdk 2) if no keypress. Must do this check BEFORE setting Clock Speed in Case you bricked it
 		{
-		DCO._pGPStime->user_setup_menu_active=1;	
+		RfGen._pGPStime->user_setup_menu_active=1;	
 		user_interface();   
 		}
 		
@@ -134,14 +134,14 @@ if (check_data_validity()==-1)  //if data was bad, breathe LED for 10 seconds an
         _callsign,/** the Callsign. */
         CONFIG_LOCATOR4,/**< the default QTH locator if GPS isn't used. */
         10,             /**< Tx power, dbm. */
-        &DCO,           /**< the PioDCO object. */
         XMIT_FREQUENCY,
         0,           /**< the carrier freq. shift relative to dial freq. */ //not used
         RFOUT_PIN,       /**< RF output GPIO pin. */
 		(uint8_t)_start_minute[0]-'0',   /**< convert ASCI digits to ints  */
 		(uint8_t)_id13[0]-'0',   
 		(uint8_t)_suffix[0]-'0',
-		_DEXT_config		
+		_DEXT_config,
+		&RfGen
         );
     pWSPR = pWB;  //this lets things outside this routine access the WB context
     pWB->_txSched.force_xmit_for_testing = force_transmit;
@@ -152,10 +152,10 @@ if (check_data_validity()==-1)  //if data was bad, breathe LED for 10 seconds an
 	pWB->_txSched.low_power_mode=(uint8_t)_battery_mode[0]-'0';
 	strcpy(pWB->_txSched.id13,_id13);
 	int uart_number=(uint8_t)_custom_PCB[0]-'0';  //custom PCB uses Uart 1 if selected, otherwise uart 0
-	DCO._pGPStime = GPStimeInit(uart_number, 9600, GPS_PPS_PIN, PLL_SYS_MHZ); //the 0 defines uart0, so the RX is GPIO 1 (pin 2 on pico). TX to GPS module not needed
-	DCO._pGPStime->user_setup_menu_active=0;
-	DCO._pGPStime->forced_XMIT_on=force_transmit;
-	DCO._pGPStime->verbosity=(uint8_t)_verbosity[0]-'0';   
+	RfGen._pGPStime = GPStimeInit(uart_number, 9600, PLL_SYS_MHZ); //the 0 defines uart0, so the RX is GPIO 1 (pin 2 on pico). TX to GPS module not needed
+	RfGen._pGPStime->user_setup_menu_active=0;
+	RfGen._pGPStime->forced_XMIT_on=force_transmit;
+	RfGen._pGPStime->verbosity=(uint8_t)_verbosity[0]-'0';   
     int tick = 0;int tick2 = 0;  //used for timing various messages
 	LED_sequence_start_time = get_absolute_time();
 	if (_Datalog_mode[0]=='1') datalog_loop();
@@ -166,18 +166,13 @@ if (check_data_validity()==-1)  //if data was bad, breathe LED for 10 seconds an
 		I2C_read();
 		
 		if(WSPRbeaconIsGPSsolutionActive(pWB))
-        {
-            char *pgps_qth = WSPRbeaconGetLastQTHLocator(pWB);  //GET MAIDENHEAD       - this code in original fork wasnt working due to error in WSPRbeacon.c
-            if(pgps_qth)
-            {
-                strncpy(pWB->_pu8_locator, pgps_qth, 6);     //does full 6 char maidenhead 				
-//		        strcpy(pWB->_pu8_locator,"AA1ABC");          //DEBUGGING TO FORCE LOCATOR VALUE				
-            }
- 
-		if (pWSPR->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count > pWSPR->_txSched.max_sats_seen_today) pWSPR->_txSched.max_sats_seen_today=pWSPR->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count;
-
- }        
-        WSPRbeaconTxScheduler(pWB, YES, GPS_PPS_PIN);   
+			{
+				char *pgps_qth = WSPRbeaconGetLastQTHLocator(pWB);  //GET MAIDENHEAD       - this code in original fork wasnt working due to error in WSPRbeacon.c
+				if(pgps_qth)
+					strncpy(pWB->_pu8_locator, pgps_qth, 6);     //does full 6 char maidenhead 									 
+				if (pWSPR->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count > pWSPR->_txSched.max_sats_seen_today) pWSPR->_txSched.max_sats_seen_today=pWSPR->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count;
+			}        
+        WSPRbeaconTxScheduler(pWB, YES);   
                 
 		if (pWB->_txSched.verbosity>=5)
 		{
@@ -186,10 +181,10 @@ if (check_data_validity()==-1)  //if data was bad, breathe LED for 10 seconds an
 		}	
 
 		if (getchar_timeout_us(0)>0)   //looks for input on USB serial port only. Note: getchar_timeout_us(0) returns a -2 (as of sdk 2) if no keypress. But if you force it into a Char type, becomes something else
-		{
-		DCO._pGPStime->user_setup_menu_active=1;	
-		user_interface();   
-		}
+			{
+			RfGen._pGPStime->user_setup_menu_active=1;	
+			user_interface();   
+			}
 
 		const float conversionFactor = 3.3f / (1 << 12);          //read temperature
 		adc_select_input(4);	
@@ -198,7 +193,7 @@ if (check_data_validity()==-1)  //if data was bad, breathe LED for 10 seconds an
 		if (tempC==0) tempC=tempC_raw;  //if tempC still uninitialized, preload its value
 		tempC= (0.99*tempC) + (0.01*tempC_raw);  // implements a 1st order IIR lowpass filter (aka "one-line DSP")
 		pWB->_txSched.temp_in_Celsius=tempC;           
-		DCO._pGPStime->temp_in_Celsius=tempC;
+		RfGen._pGPStime->temp_in_Celsius=tempC;
 		
 		adc_select_input(3);  //if setup correctly, ADC3 reads Vsys   // read voltage
 		float volts_raw = 3*(float)adc_read() * conversionFactor;         //times 3 because of onboard voltage divider
@@ -213,7 +208,7 @@ if (check_data_validity()==-1)  //if data was bad, breathe LED for 10 seconds an
 			   .......   */
 				if(0 == ++tick2 % 10)      //every ~5 sec
 				{
-				if (pWB->_txSched.verbosity>=1) StampPrintf("Temp: %0.1f  Volts: %0.1f  Altitude: %0.0f  Satellite count: %d\n", tempU,volts,DCO._pGPStime->_altitude ,DCO._pGPStime->_time_data.sat_count);		
+				if (pWB->_txSched.verbosity>=1) StampPrintf("Temp: %0.1f  Volts: %0.1f  Altitude: %0.0f  Satellite count: %d\n", tempU,volts,RfGen._pGPStime->_altitude ,RfGen._pGPStime->_time_data.sat_count);		
 				//if (pWB->_txSched.verbosity>=3) printf("TELEN Vals 1 through 4:  %d %d %d %d\n",telen_values[0],telen_values[1],telen_values[2],telen_values[3]);
 				}
 		
@@ -1039,24 +1034,24 @@ void datalog_loop()
 						t = absolute_time_diff_us(GPS_wait_start_time, get_absolute_time());	
 										if (getchar_timeout_us(0)>0)   //looks for input on USB serial port only. Note: getchar_timeout_us(0) returns a -2 (as of sdk 2) if no keypress. But if you force it into a Char type, becomes something else
 										{
-											DCO._pGPStime->user_setup_menu_active=1;	
+											RfGen._pGPStime->user_setup_menu_active=1;	
 											user_interface();   
 										}
 					} 
-				while (( t<450000000ULL )&&(DCO._pGPStime->_time_data.sat_count<4));               //wait for DCO._pGPStime->_time_data.sat_coun>4 with 65 second maximum time
+				while (( t<450000000ULL )&&(RfGen._pGPStime->_time_data.sat_count<4));               //wait for RfGen._pGPStime->_time_data.sat_coun>4 with 65 second maximum time
 					//set to 450 seconds !!!!!
 				elapsed_seconds= t  / 1000000ULL;
 
-				if (DCO._pGPStime->_time_data.sat_count>=4)
+				if (RfGen._pGPStime->_time_data.sat_count>=4)
 				{
 				sleep_ms(3000); //even though sat count seen, wait a bit longer
-				sprintf(string_to_log,"latitutde:,%lli,longitude:,%lli,altitude:,%f,sat count:,%d,time:,%s,temp:,%f,bat voltage:,%f,seconds to aquisition:,%d\n",DCO._pGPStime->_time_data._i64_lon_100k,DCO._pGPStime->_time_data._i64_lat_100k,DCO._pGPStime->_altitude,DCO._pGPStime->_time_data.sat_count,DCO._pGPStime->_time_data._full_time_string,tempf,volts,elapsed_seconds);
+				sprintf(string_to_log,"latitutde:,%lli,longitude:,%lli,altitude:,%f,sat count:,%d,time:,%s,temp:,%f,bat voltage:,%f,seconds to aquisition:,%d\n",RfGen._pGPStime->_time_data._i64_lon_100k,RfGen._pGPStime->_time_data._i64_lat_100k,RfGen._pGPStime->_altitude,RfGen._pGPStime->_time_data.sat_count,RfGen._pGPStime->_time_data._full_time_string,tempf,volts,elapsed_seconds);
 				write_to_next_avail_flash(string_to_log);
 				printf("GPS data has been logged.\n");
 				}
 					else
 				{
-				sprintf(string_to_log,"no reading, time might be:,%s,temp:,%f,bat voltage:,%f\n",DCO._pGPStime->_time_data._full_time_string,tempf,volts);
+				sprintf(string_to_log,"no reading, time might be:,%s,temp:,%f,bat voltage:,%f\n",RfGen._pGPStime->_time_data._full_time_string,tempf,volts);
 				write_to_next_avail_flash(string_to_log);
 				printf("NO GPS seen :-(\n");
 				}

@@ -5,28 +5,24 @@
 static TxChannelContext *spTX = NULL;
 
 /**
- * @brief ISR initiated by timer alarm interupt each WSPR bit period. 
- * @brief It pops next byte from transmit buffer, compensates oscillator 
- * @brief frequency shift and tunes oscillator frequency for the next
- * @brief symbol transmission (frequency shift keying)
- * @param NONE
- * @return NONE
+ISR initiated by timer alarm interupt each WSPR bit period. 
  */
 static void RAM (TxChannelISR)(void)
 {
-    PioDco *pDCO = spTX->_p_oscillator;
+    RfGenStruct *RfGen = spTX->_p_oscillator;
 
     uint8_t byte;
     const int n2send = TxChannelPop(spTX, &byte);
     if(n2send)
     {
-        const int32_t i32_compensation_millis = 
-            PioDCOGetFreqShiftMilliHertz(spTX->_p_oscillator, 
-                                         (uint64_t)(spTX->_u32_dialfreqhz * 1000LL));
+        //wuz set output frequency here (ignore "compensation"
+			//RgGen may have the data you need? or just sptx, either way
+			
+		/*const int32_t i32_compensation_millis =  PioDCOGetFreqShiftMilliHertz(spTX->_p_oscillator, 
+	    (uint64_t)(spTX->_u32_dialfreqhz * 1000LL));
             //compensate freqency shift using last symbol frequency
-
-pico_fractional_pll_set_freq_f((float)spTX->_u32_dialfreqhz + (float)byte * 12000.f / 8192.f - (float)i32_compensation_millis / 1000.f);
-            //set the current symbol frequency
+			pico_fractional_pll_set_freq_f((float)spTX->_u32_dialfreqhz + (float)byte * 12000.f / 8192.f - (float)i32_compensation_millis / 1000.f);
+            //set the current symbol frequency*/
     }
 
     spTX->_tm_future_call += spTX->_bit_period_us; //next alarm calculation
@@ -41,16 +37,14 @@ EXIT:
 /// @param timer_alarm_num Pico-specific hardware timer resource id.
 /// @param pDCO Ptr to oscillator.
 /// @return the Context.
-TxChannelContext *TxChannelInit(const uint32_t bit_period_us, uint8_t timer_alarm_num, 
-                                PioDco *pDCO)
+TxChannelContext *TxChannelInit(const uint32_t bit_period_us, uint8_t timer_alarm_num,RfGenStruct *RfGen)
 {
 
     TxChannelContext *p = calloc(1, sizeof(TxChannelContext));
 
     p->_bit_period_us = bit_period_us;
     p->_timer_alarm_num = timer_alarm_num;
-    p->_p_oscillator = pDCO;
-
+	p->_p_oscillator = RfGen;
     spTX = p;
 
     hw_set_bits(&timer_hw->inte, 1U << p->_timer_alarm_num);
@@ -109,7 +103,8 @@ void TxChannelClear(TxChannelContext *pctx)
 {
     pctx->_ix_input = pctx->_ix_output = 0;
 }
-int32_t PioDCOGetFreqShiftMilliHertz(const PioDco *pdco, uint64_t u64_desired_frq_millihz)
+
+/*int32_t PioDCOGetFreqShiftMilliHertz(const PioDco *pdco, uint64_t u64_desired_frq_millihz)
 {
     if(!pdco->_pGPStime)
     {
@@ -117,7 +112,7 @@ int32_t PioDCOGetFreqShiftMilliHertz(const PioDco *pdco, uint64_t u64_desired_fr
     }
 
     static int64_t i64_last_correction = 0;
-    const int64_t dt = pdco->_pGPStime->_time_data._i32_freq_shift_ppb; /* Parts per billion. */   //Used here
+    const int64_t dt = pdco->_pGPStime->_time_data._i32_freq_shift_ppb; // Parts per billion.    //Used here
     if(dt)
     {
         i64_last_correction = dt;
@@ -133,4 +128,4 @@ int32_t PioDCOGetFreqShiftMilliHertz(const PioDco *pdco, uint64_t u64_desired_fr
     }
 
     return 0U;
-}
+}*/

@@ -7,39 +7,19 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 #include "defines.h"
-#include "timer_PIO.pio.h"
-
 
 static GPStimeContext *spGPStimeContext = NULL;
 static GPStimeData *spGPStimeData = NULL;
 static uint16_t byte_count;
 
-static 	PIO timer_PIO;  /*state machine used for high resolution timing of duration between PPS pulses
-						at 115Mhz clock speed each instruction in PIO takes 1/115M = 8.69565E-09 seconds
-						the majority of the PIO loop executes 2 instructions each count cycle, which is 2 X 8.69565E-09 = 1.73913E-08 secs
-						so the resolution of the timer is about 17.39130435 nanoSeconds per tick
-						*/
 static int sm;
 static uint offset;
-static int32_t PIO_counts_per_PPS;
-static int32_t	elapsed_PIO_ticks_FILTERED;
 static int32_t tics_per_second;
 static int32_t nanosecs_per_tick;
 
-/// @brief Initializes GPS time module Context.
-/// @param uart_id UART id to which GPS receiver is connected, 0 OR 1.
-/// @param uart_baud UART baudrate, 115200 max.
-/// @param pps_gpio GPIO pin of PPS (second pulse) from GPS receiver.
-/// @return the new GPS time Context.
-GPStimeContext *GPStimeInit(int uart_id, int uart_baud, int pps_gpio, uint32_t clock_speed)
+GPStimeContext *GPStimeInit(int uart_id, int uart_baud, uint32_t clock_speed)
 {
   
-	timer_PIO = pio1;    //instantiate pio1 for the timer, pio0 already used for WSPR generation
-	sm = 0;			     //each of the two PIOs has 4 state machines (sm) available. use the 1st one 
-    offset = pio_add_program( timer_PIO, &timer_PIO_program);
-    timer_PIO_program_init(timer_PIO, sm, offset,pps_gpio);
-
-
     // Set up our UART with the required speed & assign pins.
     uart_init(uart_id ? uart1 : uart0, uart_baud);
     gpio_set_function(uart_id ? 8 : 0, GPIO_FUNC_UART);
@@ -49,14 +29,10 @@ GPStimeContext *GPStimeInit(int uart_id, int uart_baud, int pps_gpio, uint32_t c
 
     pgt->_uart_id = uart_id;
     pgt->_uart_baudrate = uart_baud;
-    pgt->_pps_gpio = pps_gpio;
 
     spGPStimeContext = pgt;
     spGPStimeData = &pgt->_time_data;
 
-    gpio_init(pps_gpio);
-    gpio_set_dir(pps_gpio, GPIO_IN);
-	gpio_set_irq_enabled_with_callback(pps_gpio, GPIO_IRQ_EDGE_RISE, true, &GPStimePPScallback);
 
     uart_set_hw_flow(uart_id ? uart1 : uart0, false, false);
     uart_set_format(uart_id ? uart1 : uart0, 8, 1, UART_PARITY_NONE);
@@ -65,16 +41,10 @@ GPStimeContext *GPStimeInit(int uart_id, int uart_baud, int pps_gpio, uint32_t c
     irq_set_enabled(uart_id ? UART1_IRQ : UART0_IRQ, true);
     uart_set_irq_enables(uart_id ? uart1 : uart0, true, false);
 
-	nanosecs_per_tick= 2000000 / clock_speed;  //because two instructions cycle are used per cycle of the PIO, also adds a million scaling factor 
-	tics_per_second = 1000000 * clock_speed / 2;
-	printf(" clock speed %d  nanosecs per tick Scaled %d tics per sec %d\n",clock_speed, nanosecs_per_tick,tics_per_second);
-	elapsed_PIO_ticks_FILTERED= tics_per_second; //preload ideal value to reduce initial filtering lock time. 
-
     return pgt;
 }
 
-/// @brief Deinits the GPS module and destroys allocated resources.
-/// @param pp Ptr to Ptr of the Context.
+
 void GPStimeDestroy(GPStimeContext **pp)
 {
     spGPStimeContext = NULL;    /* Detach global context Ptr. */
@@ -84,26 +54,9 @@ void GPStimeDestroy(GPStimeContext **pp)
     *pp = NULL;
 }
 
-/// @brief The PPS interrupt service subroutine. Once a second it recalculates the frequency compensation needed based on time seen between PPS from GPS
-/// @param  gpio The GPIO pin of Pico which is connected to PPS output of GPS rec.
 
-void RAM (GPStimePPScallback)(uint gpio, uint32_t events)
-{   
-        if (pio_sm_get_rx_fifo_level(timer_PIO, sm) >= 2) 	//make sure at least two values are waiting to be read from the PIO           
-			PIO_counts_per_PPS = pio_sm_get(timer_PIO, sm)+ pio_sm_get(timer_PIO, sm);   //read and add 2 values from the PIO's output FIFO, representing tick count of ON and OFF pulse duration. each tick takes ~17.39nS @115Mhz clock speed
 
-		if (PIO_counts_per_PPS>10000000) //make sure data is somewhat reasonable
-		{
-		elapsed_PIO_ticks_FILTERED=0.5*elapsed_PIO_ticks_FILTERED + 0.5*PIO_counts_per_PPS; 			    //a mild IIR lowpass filter to smooth the tick count from PIO
-		spGPStimeData->_i32_freq_shift_ppb=(elapsed_PIO_ticks_FILTERED-(int64_t)tics_per_second)*(int64_t)nanosecs_per_tick;  //ticks-per-second = is the ideal (exact) number of ticks (57500000) and nano_secs_per_tick = 17.39130435 (scaled by a 1000 because of reasons. ask Roman. because we need parts per *billion*? for scaling reasons elsewhere?)
-		}
-		
-		if ((spGPStimeContext->verbosity>=3)&&(spGPStimeContext->user_setup_menu_active==0)) printf(" elapsed PIO tick  %d and FILTERED %d   FRQ correction ppb:  %lli  \n",PIO_counts_per_PPS,elapsed_PIO_ticks_FILTERED,spGPStimeData->_i32_freq_shift_ppb);
-		if ((spGPStimeContext->verbosity>=6)&&(spGPStimeContext->user_setup_menu_active==0)) GPStimeDump(spGPStimeData);
-		if ((spGPStimeContext->verbosity>=6)&&(spGPStimeContext->user_setup_menu_active==0 )) printf("PPS went on at: %.3f secs\n",((uint32_t)(to_us_since_boot(get_absolute_time()) / 1000ULL)/1000.0f ));	
-}
-
-/// @brief UART FIFO ISR. Processes another N chars received from GPS receiver
+///  UART FIFO ISR. Processes another N chars received from GPS receiver
 
 void RAM (GPStimeUartRxIsr)()
 {
@@ -133,12 +86,7 @@ void RAM (GPStimeUartRxIsr)()
 }
 
 /// @brief Processes a NMEA sentence GxRMC.
-/// @param pg Ptr to Context.
-/// @return 0 OK.
-/// @return -2 Error: bad lat format.
-/// @return -3 Error: bad lon format.
-/// @return -4 Error: no final '*' char ere checksum value.
-/// @attention Checksum validation is not implemented so far. !FIXME!
+
 int parse_GPS_data(GPStimeContext *pg)
 {                                               //"$GxRMC has time, locations, altitude and sat count! unlike $xxGGA it does NOT have date, but so what
     uint8_t *prmc = (uint8_t *)strnstr((char *)pg->_pbytebuff, "$GPGGA,", sizeof(pg->_pbytebuff));
@@ -232,5 +180,5 @@ void GPStimeDump(const GPStimeData *pd)
     printf("\nGPS solution is active:%u\n", pd->_u8_is_solution_active);
     printf("GxGGA count:%lu\n", pd->_u32_nmea_gprmc_count);
     printf("GPS Latitude:%lld Longtitude:%lld\n", pd->_i64_lat_100k, pd->_i64_lon_100k);
-    printf(" FRQ correction ppb:%lld  ", pd->_i32_freq_shift_ppb);
+
 }

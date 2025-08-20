@@ -67,16 +67,15 @@ static void sleep_callback(void) {
 /// @return Ptr to the new context.
 /// @bug The function sets schedule hardcoded to minutes 1, 2 and 3. It may lead to 
 /// @bug out of schedule transmits if the device is switched on around minute 0  
-WSPRbeaconContext *WSPRbeaconInit(const char *pcallsign, const char *pgridsquare, int txpow_dbm,
-                                  PioDco *pdco, uint32_t dial_freq_hz, uint32_t shift_freq_hz,
-                                  int gpio,  uint8_t start_minute, uint8_t id13, uint8_t suffix, const char *DEXT_config)
+WSPRbeaconContext *WSPRbeaconInit(const char *pcallsign, const char *pgridsquare, int txpow_dbm, uint32_t dial_freq_hz, uint32_t shift_freq_hz,
+                                  int gpio,  uint8_t start_minute, uint8_t id13, uint8_t suffix, const char *DEXT_config,RfGenStruct *RfGen)
 {
     WSPRbeaconContext *p = calloc(1, sizeof(WSPRbeaconContext));
 	rf_pin=gpio; //save the value of the (base) RF pin for enabling/disabling them later
     strncpy(p->_pu8_callsign, pcallsign, sizeof(p->_pu8_callsign));
     strncpy(p->_pu8_locator, pgridsquare, sizeof(p->_pu8_locator));
     p->_u8_txpower = txpow_dbm;
-    p->_pTX = TxChannelInit(682667, 0, pdco);
+    p->_pTX = TxChannelInit(682667, 0, RfGen);
     p->_pTX->_u32_dialfreqhz = dial_freq_hz + shift_freq_hz;  //THIS GETS OVERWRITTEN LATER ANYWAY
     p->_pTX->_i_tx_gpio = gpio;
  	srand(3333);
@@ -186,7 +185,7 @@ void telem_convert_Big64_to_GridLocPower(WSPRbeaconContext *c)
 /// @brief It works only if GPS receiver available (for now).
 /// @param pctx Ptr to Context.
 /// @return 0 if OK, -1 if NO GPS received available
-int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose, int GPS_PPS_PIN)   // called every half second from Main.c
+int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called every half second from Main.c
 {
               	
 	uint32_t is_GPS_available = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u32_nmea_gprmc_count;  //on if there ever were any serial data received from a GPS unit
@@ -228,11 +227,13 @@ else
 							
 								uint32_t freq_low = pctx->_pTX->_u32_dialfreqhz - 100;
 								uint32_t freq_high = pctx->_pTX->_u32_dialfreqhz + 300;
-								if (pico_fractional_pll_init(pll_sys, RFOUT_PIN, freq_low, freq_high, GPIO_DRIVE_STRENGTH_12MA, GPIO_SLEW_RATE_FAST) != 0) {
+								
+								//wuz enable xmit  
+								/*if (pico_fractional_pll_init(pll_sys, RFOUT_PIN, freq_low, freq_high, GPIO_DRIVE_STRENGTH_12MA, GPIO_SLEW_RATE_FAST) != 0) {
 									printf("pico_fractional_pll_init failed!! Halted.");
 									for (;;) { }
 								}
-								pico_fractional_pll_enable_output(true);
+								pico_fractional_pll_enable_output(true);*/
 
 							WSPRbeaconSendPacket(pctx);
 								start_time = get_absolute_time();       
@@ -241,8 +242,10 @@ else
 								else if(absolute_time_diff_us( start_time, get_absolute_time()) > 120000000ULL) 
 								{
 									forced_xmit_in_process=0; //restart after 2 mins
-									pico_fractional_pll_enable_output(false);
-									pico_fractional_pll_deinit();
+
+									//wuz stop XMIT
+									/*pico_fractional_pll_enable_output(false);
+									pico_fractional_pll_deinit();*/
 									printf("Pio *STOP*  called by end of forced xmit. small pause before restart\n");
 									sleep_ms(2000);
 								}								
@@ -271,8 +274,9 @@ else
 		if (pctx->_txSched.oscillatorOff && schedule[(current_minute+9)%10]==-1)    // if we want to switch oscillator off and are in non sheduled interval 
 		{
 			transmitter_status=0; 
-			pico_fractional_pll_enable_output(false);
-			pico_fractional_pll_deinit();
+			//wuz stop XMIT
+			/*pico_fractional_pll_enable_output(false);
+			pico_fractional_pll_deinit();*/
 		}
 	}
 	
@@ -290,11 +294,14 @@ else
 
 			uint32_t freq_low = pctx->_pTX->_u32_dialfreqhz - 100;
 			uint32_t freq_high = pctx->_pTX->_u32_dialfreqhz + 300;
-			if (pico_fractional_pll_init(pll_sys, RFOUT_PIN, freq_low, freq_high, GPIO_DRIVE_STRENGTH_12MA, GPIO_SLEW_RATE_FAST) != 0) {
+
+			//wuz start XMIT
+			/*if (pico_fractional_pll_init(pll_sys, RFOUT_PIN, freq_low, freq_high, GPIO_DRIVE_STRENGTH_12MA, GPIO_SLEW_RATE_FAST) != 0) {
 				printf("pico_fractional_pll_init failed!! Halted.");
 				for (;;) { }
-			}
-			pico_fractional_pll_enable_output(true);
+				}
+			pico_fractional_pll_enable_output(true);*/
+			
 			transmitter_status=1;
 			WSPRbeaconCreatePacket(pctx, schedule[current_minute] ); //the schedule determines packet type (1-4 for U4B 1st msg,U4B 2nd msg,Zachtek 1st, Zachtek 2nd)
 			sleep_ms(1000); //technically your supposed to wait 1 second after minute to begin TX

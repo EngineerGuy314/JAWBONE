@@ -8,7 +8,7 @@
 
 //////////////// Hardware related defines ////////////////////////////
 //#define PLL_SYS_MHZ 270UL//115UL // This sets CPU speed. Roman originally had 270UL. 
-      // After improvement od PIODCO we are now on 115 MHz (for 20m band) :-)     
+      // After improvement od RfGenStruct we are now on 115 MHz (for 20m band) :-)     
 
 // Serial data from GPS module wired to UART0 RX, GPIO 1 (pin 2 on pico). on custom PCB its uart1, GPIO9. taken care of in main.c
 
@@ -128,7 +128,9 @@
 
 		
 ////////////    Data type definition /////////////////////////////
-typedef struct pico_fractional_pll_instance_t {                          //from pico fractional MARKED FOR DELETION
+
+//from pico fractional MARKED FOR DELETION
+/*typedef struct pico_fractional_pll_instance_t {                          
   // do not change this block, referred from the assembly code
   PLL pll;
   uint32_t acc_increment;
@@ -147,7 +149,7 @@ typedef struct pico_fractional_pll_instance_t {                          //from 
   uint32_t postdiv2;
   uint32_t clkdiv;
   uint32_t freq_delta;
-} pico_fractional_pll_instance_t;
+} pico_fractional_pll_instance_t;*/
 
 //gps time
 
@@ -198,7 +200,7 @@ typedef struct
     uint32_t _ui32_frq_hz;      /* Working freq, Hz. */
     int32_t _ui32_frq_millihz;  /* Working freq additive shift, mHz. */
     int _is_enabled;
-} PioDco;
+} RfGenStruct;
 
 typedef struct
 {
@@ -207,7 +209,7 @@ typedef struct
     uint8_t _timer_alarm_num;
     uint8_t _ix_input, _ix_output;
     uint8_t _pbyte_buffer[256];
-    PioDco *_p_oscillator;
+    RfGenStruct *_p_oscillator;
     uint32_t _u32_dialfreqhz;
     int _i_tx_gpio;
 
@@ -333,7 +335,7 @@ uint8_t wspr_code(char c);
 void pad_callsign(char * call);
 
 //pico fractional from kazu  MARKED FOR DELETION
-int pico_fractional_pll_init(PLL pll, uint gpio, uint32_t freq_range_min, uint32_t freq_range_max, enum gpio_drive_strength drive_strength, enum gpio_slew_rate slew_rate);
+/*int pico_fractional_pll_init(PLL pll, uint gpio, uint32_t freq_range_min, uint32_t freq_range_max, enum gpio_drive_strength drive_strength, enum gpio_slew_rate slew_rate);
 
 int pico_fractional_pll_deinit(void);
 void pico_fractional_pll_enable_output(bool enable);
@@ -343,32 +345,30 @@ void pico_fractional_pll_set_freq_u32(uint32_t freq);
 // fixed point: 28bit integer + 4bit fraction
 void pico_fractional_pll_set_freq_28p4(uint32_t freq_28p4);
 void pico_fractional_pll_set_freq_d(double freq);
-void pico_fractional_pll_set_freq_f(float freq);
-
+void pico_fractional_pll_set_freq_f(float freq);*/
 
 
 //TX CHannel
 
 TxChannelContext *TxChannelInit(const uint32_t bit_period_us, 
-                                uint8_t timer_alarm_num, PioDco *pDCO);
+                                uint8_t timer_alarm_num,RfGenStruct *RfGen);
 
 uint8_t TxChannelPending(TxChannelContext *pctx);
 int TxChannelPush(TxChannelContext *pctx, uint8_t *psrc, int n);
 int TxChannelPop(TxChannelContext *pctx, uint8_t *pdst);
 void TxChannelClear(TxChannelContext *pctx);
-int32_t PioDCOGetFreqShiftMilliHertz(const PioDco *pdco, uint64_t u64_desired_frq_millihz);
+//int32_t RfGenStructGetFreqShiftMilliHertz(const RfGenStruct *pdco, uint64_t u64_desired_frq_millihz);
 
 //wspr beacon
 
-WSPRbeaconContext *WSPRbeaconInit(const char *pcallsign, const char *pgridsquare, int txpow_dbm,
-                                  PioDco *pdco, uint32_t dial_freq_hz, uint32_t shift_freq_hz,
-                                  int gpio,  uint8_t start_minute,  uint8_t id13 ,  uint8_t suffix,const char *DEXT_config);
+WSPRbeaconContext *WSPRbeaconInit(const char *pcallsign, const char *pgridsquare, int txpow_dbm, uint32_t dial_freq_hz, uint32_t shift_freq_hz,
+                                  int gpio,  uint8_t start_minute,  uint8_t id13 ,  uint8_t suffix,const char *DEXT_config,RfGenStruct *RfGen);
 void WSPRbeaconSetDialFreq(WSPRbeaconContext *pctx, uint32_t freq_hz);
 int WSPRbeaconCreatePacket(WSPRbeaconContext *pctx,int packet_type);
 char* add_brackets(const char * call);
 int WSPRbeaconSendPacket(const WSPRbeaconContext *pctx);
 char EncodeBase36(uint8_t val);
-int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose, int GPS_PPS_PIN);
+int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose);
 void WSPRbeaconDumpContext(const WSPRbeaconContext *pctx);
 char *WSPRbeaconGetLastQTHLocator(WSPRbeaconContext *pctx);
 uint8_t WSPRbeaconIsGPSsolutionActive(const WSPRbeaconContext *pctx);
@@ -382,10 +382,9 @@ int calc_solar_angle(int hour, int min, int64_t int_lat, int64_t int_lon);
 
 // GPS TIME
 
-GPStimeContext *GPStimeInit(int uart_id, int uart_baud, int pps_gpio, uint32_t clock_speed);
+GPStimeContext *GPStimeInit(int uart_id, int uart_baud, uint32_t clock_speed);
 void GPStimeDestroy(GPStimeContext **pp);
 int parse_GPS_data(GPStimeContext *pg);
-void RAM (GPStimePPScallback)(uint gpio, uint32_t events);
 void RAM (GPStimeUartRxIsr)();
 void GPStimeDump(const GPStimeData *pd);
 inline uint64_t GetUptime64(void)

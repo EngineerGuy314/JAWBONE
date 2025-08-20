@@ -24,11 +24,9 @@ project(JAWBONE C CXX ASM)
 add_definitions(-DPICO_XOSC_STARTUP_DELAY_MULTIPLIER=64)  #fixes problem with slow XOSC startup causing failure to boot- Thanks Kazu!
 pico_sdk_init()
 add_executable(JAWBONE)
-pico_generate_pio_header(JAWBONE ${CMAKE_CURRENT_LIST_DIR}/timer_PIO.pio)# These Lines are what invoke the assembler that compiles the .pio programs
 pico_generate_pio_header(JAWBONE ${CMAKE_CURRENT_LIST_DIR}/onewire/onewire_library.pio) 
 target_sources(JAWBONE PUBLIC
                ${CMAKE_CURRENT_LIST_DIR}/utilities.c
-			   ${CMAKE_CURRENT_LIST_DIR}/pico_fractional_pll.c
                ${CMAKE_CURRENT_LIST_DIR}/GPStime.c
                ${CMAKE_CURRENT_LIST_DIR}/TxChannel.c
                ${CMAKE_CURRENT_LIST_DIR}/WSPRbeacon.c
