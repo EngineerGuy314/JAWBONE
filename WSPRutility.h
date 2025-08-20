@@ -27,7 +27,6 @@
 #include <string.h>
 #include <ctype.h>
 
-#include "nhash.h"
 
 #define WSPR_SYMBOL_COUNT   162
 #define WSPR_BIT_COUNT      162

@@ -27,17 +27,19 @@ add_executable(JAWBONE)
 pico_generate_pio_header(JAWBONE ${CMAKE_CURRENT_LIST_DIR}/timer_PIO.pio)# These Lines are what invoke the assembler that compiles the .pio programs
 pico_generate_pio_header(JAWBONE ${CMAKE_CURRENT_LIST_DIR}/onewire/onewire_library.pio) 
 target_sources(JAWBONE PUBLIC
-               ${CMAKE_CURRENT_LIST_DIR}/pico_fractional_pll.c
+               ${CMAKE_CURRENT_LIST_DIR}/logutils.c
+               ${CMAKE_CURRENT_LIST_DIR}/utilities.c
+               ${CMAKE_CURRENT_LIST_DIR}/nhash.c
+               ${CMAKE_CURRENT_LIST_DIR}/WSPRutility.c
+			   ${CMAKE_CURRENT_LIST_DIR}/pico_fractional_pll.c
                ${CMAKE_CURRENT_LIST_DIR}/GPStime.c
                ${CMAKE_CURRENT_LIST_DIR}/TxChannel.c
-               ${CMAKE_CURRENT_LIST_DIR}/WSPRutility.c
-               ${CMAKE_CURRENT_LIST_DIR}/nhash.c
+
                ${CMAKE_CURRENT_LIST_DIR}/maidenhead.c
                ${CMAKE_CURRENT_LIST_DIR}/WSPRbeacon.c
-               ${CMAKE_CURRENT_LIST_DIR}/logutils.c
                ${CMAKE_CURRENT_LIST_DIR}/onewire/onewire_library.c  
-               ${CMAKE_CURRENT_LIST_DIR}/utilities.c
-               ${CMAKE_CURRENT_LIST_DIR}/main.c
+               ${CMAKE_CURRENT_LIST_DIR}/main.c 
+
               )
 
 pico_set_program_name(JAWBONE "JAWBONE")

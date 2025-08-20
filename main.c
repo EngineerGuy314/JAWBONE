@@ -15,7 +15,6 @@
 #include "hardware/flash.h"
 #include "WSPRbeacon.h"
 #include "defines.h"
-#include "logutils.h"
 #include <protos.h>
 #include <math.h>
 #include <utilities.h>
