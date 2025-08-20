@@ -7,8 +7,14 @@
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
 #include "hardware/adc.h"   
+#define BUFFER_SIZE 256
 
+static char logBuffer[BUFFER_SIZE] = {0};
 
+static char callsign[12];
+static char locator[7];
+static int8_t power;
+static int _verbos;
 
 void get_user_input(const char *prompt, char *input_variable, int max_length) {
     int index = 0;
@@ -442,5 +448,544 @@ uint32_t nhash_( const void *key, int *length0, uint32_t *initval0)
 
 //uint32_t __stdcall NHASH(const void *key, size_t length, uint32_t initval)
 
+ void StampPrintf(const char* pformat, ...)
+{
+    static uint32_t sTick = 0;
+    if(!sTick)
+    {
+        stdio_init_all();
+    }
 
+    uint64_t tm_us = to_us_since_boot(get_absolute_time());
+    
+    const uint32_t tm_day = (uint32_t)(tm_us / 86400000000ULL);
+    tm_us -= (uint64_t)tm_day * 86400000000ULL;
 
+    const uint32_t tm_hour = (uint32_t)(tm_us / 3600000000ULL);
+    tm_us -= (uint64_t)tm_hour * 3600000000ULL;
+
+    const uint32_t tm_min = (uint32_t)(tm_us / 60000000ULL);
+    tm_us -= (uint64_t)tm_min * 60000000ULL;
+    
+    const uint32_t tm_sec = (uint32_t)(tm_us / 1000000ULL);
+    tm_us -= (uint64_t)tm_sec * 1000000ULL;
+
+    char timestamp[64];  //let's create timestamp
+    snprintf(timestamp, sizeof(timestamp), "%02lud%02lu:%02lu:%02lu.%06llu [%04lu] ", tm_day, tm_hour, tm_min, tm_sec, tm_us, sTick++);
+
+    va_list argptr;
+    va_start(argptr, pformat);
+    char message[BUFFER_SIZE];
+    vsnprintf(message, sizeof(message), pformat, argptr); //let's format the message 
+    va_end(argptr);
+    strncat(logBuffer, timestamp, BUFFER_SIZE - strlen(logBuffer) - 1);
+    strncat(logBuffer, message, BUFFER_SIZE - strlen(logBuffer) - 1);
+    strncat(logBuffer, "\n", BUFFER_SIZE - strlen(logBuffer) - 1);
+    
+}
+
+/// @brief Outputs the content of the log buffer to stdio (UART and/or USB)
+/// @brief Direct output to UART is very slow so we will do it in CPU idle times
+/// @brief and not in time critical functions
+ void DoLogPrint()
+{
+    if (logBuffer[0] != '\0')
+    {
+        printf("%s", logBuffer);
+        logBuffer[0] = '\0';  // Clear the buffer
+
+    }
+
+}
+
+void wspr_encode(const char * call, const char * loc, const int8_t dbm, uint8_t * symbols, uint8_t verbos)
+{
+  char call_[13];
+  char loc_[7];
+  uint8_t dbm_ = dbm;
+  strcpy(call_, call);
+  strcpy(loc_, loc);
+  _verbos=verbos;
+  if (verbos>=4)
+  {printf(" THECALLSIGN IS: %s\n",call);
+	printf(" THE LoCaToR IS: %s and its length is %i\n",loc,strlen(loc));
+  }
+
+  // Ensure that the message text conforms to standards
+  // --------------------------------------------------
+  wspr_message_prep(call_, loc_, dbm_);
+
+  // Bit packing
+  // -----------
+  uint8_t c[11];
+  wspr_bit_packing(c);
+
+  // Convolutional Encoding
+  // ---------------------
+  uint8_t s[WSPR_SYMBOL_COUNT];
+  convolve(c, s, 11, WSPR_BIT_COUNT);
+
+  // Interleaving
+  // ------------
+  wspr_interleave(s);
+
+  // Merge with sync vector
+  // ----------------------
+  wspr_merge_sync_vector(s, symbols);
+}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+void wspr_message_prep(char * call, char * loc, int8_t dbm)
+{
+  // Callsign validation and padding
+  // -------------------------------
+	
+	// Ensure that the only allowed characters are digits, uppercase letters, slash, and angle brackets
+	uint8_t i;
+   if (_verbos>=4) printf(" wsprs MSG prep callsign: %s and its length is %i\n",call,strlen(call));
+   if (_verbos>=4) printf(" wsprs MSG prep POWER: %s and its length is %i and dbm %i\n",loc,strlen(loc),dbm);
+
+  for(i = 0; i < 12; i++)  //puts all letters in callsign uppercase
+	{
+		if(call[i] != '/' && call[i] != '<' && call[i] != '>')
+		{
+			call[i] = toupper(call[i]);
+			if(!((isdigit(call[i]) || isupper(call[i])) || (isupper(call[i])==0)))  //changed Feb 9, 2025 -  previous code was changing the null terminator to a space, wheich then included potential garbage from unitialized space (similar to a non null-terminated string). if this garbage included a / then subsequent code would encode as a type 3 wspr message and screw up telemtry big time intermittently.  this was contributing to non 100% spot reception on previous flights! (i also added parenthesis to clarify the strange C order of operator presendce regarding ! )
+			{
+				call[i] = ' ';
+			}
+		}
+	}
+  call[12] = 0;
+
+  strncpy(callsign, call, 12);
+
+	// Grid locator validation
+  if(strlen(loc) == 4 || strlen(loc) == 6)
+	{
+		for(i = 0; i <= 1; i++)
+		{
+			loc[i] = toupper(loc[i]);
+			if((loc[i] < 'A' || loc[i] > 'R'))
+			{
+				strncpy(loc, "SS00AA", 7);
+			}
+		}
+		for(i = 2; i <= 3; i++)
+		{
+			if(!(isdigit(loc[i])))
+			{
+				strncpy(loc, "BB00AA", 7);
+			}
+		}
+	}
+	else
+	{
+		printf("length: %d, contents: %s\n",strlen(loc),loc);
+		strncpy(loc, "BB00BB", 7); 
+	}
+
+	if(strlen(loc) == 6)
+	{
+		for(i = 4; i <= 5; i++)
+		{
+			loc[i] = toupper(loc[i]);
+			if((loc[i] < 'A' || loc[i] > 'X'))
+			{
+				printf("it didnt like i: %d and char: %c\n",i,loc[i]);
+				strncpy(loc, "DD00AA", 7); 				
+			}
+		}
+	}
+
+  strncpy(locator, loc, 7);
+
+	// Power level validation
+	// Only certain increments are allowed
+	if(dbm > 60)
+	{
+		dbm = 60;
+	}
+  //const uint8_t VALID_DBM_SIZE = 28;
+  const int8_t valid_dbm[VALID_DBM_SIZE] =
+    {-30, -27, -23, -20, -17, -13, -10, -7, -3, 
+     0, 3, 7, 10, 13, 17, 20, 23, 27, 30, 33, 37, 40,
+     43, 47, 50, 53, 57, 60};
+  for(i = 0; i < VALID_DBM_SIZE; i++)
+  {
+    if(dbm == valid_dbm[i])
+    {
+      power = dbm;
+    }
+  }
+  // If we got this far, we have an invalid power level, so we'll round down
+  for(i = 1; i < VALID_DBM_SIZE; i++)
+  {
+    if(dbm < valid_dbm[i] && dbm >= valid_dbm[i - 1])
+    {
+      power = valid_dbm[i - 1];
+    }
+  }
+}
+
+void wspr_bit_packing(uint8_t * c)
+{
+  uint32_t n, m;
+
+  // Determine if type 1, 2 or 3 message
+	char* slash_avail = strchr(callsign, (int)'/');
+	if(callsign[0] == '<')
+	{
+		//printf("BIT Packing Type 3 \n");
+		// Type 3 message
+		char base_call[13];
+		memset(base_call, 0, 13);
+		uint32_t init_val = 146;
+		char* bracket_avail = strchr(callsign, (int)'>');
+		int call_len = bracket_avail - callsign - 1;
+		strncpy(base_call, callsign + 1, call_len);
+		uint32_t hash = nhash_(base_call, &call_len, &init_val);
+		hash &= 32767;
+
+		// Convert 6 char grid square to "callsign" format for transmission
+		// by putting the first character at the end
+		char temp_loc = locator[0];
+		locator[0] = locator[1];
+		locator[1] = locator[2];
+		locator[2] = locator[3];
+		locator[3] = locator[4];
+		locator[4] = locator[5];
+		locator[5] = temp_loc;
+
+		n = wspr_code(locator[0]);
+		n = n * 36 + wspr_code(locator[1]);
+		n = n * 10 + wspr_code(locator[2]);
+		n = n * 27 + (wspr_code(locator[3]) - 10);
+		n = n * 27 + (wspr_code(locator[4]) - 10);
+		n = n * 27 + (wspr_code(locator[5]) - 10);
+
+		m = (hash * 128) - (power + 1) + 64;
+	}
+	else if(slash_avail == (void *)0)
+	{
+		// Type 1 message
+		//printf("BIT Packing type 1 \n");
+		pad_callsign(callsign);
+		n = wspr_code(callsign[0]);
+		n = n * 36 + wspr_code(callsign[1]);
+		n = n * 10 + wspr_code(callsign[2]);
+		n = n * 27 + (wspr_code(callsign[3]) - 10);
+		n = n * 27 + (wspr_code(callsign[4]) - 10);
+		n = n * 27 + (wspr_code(callsign[5]) - 10);
+				
+		m = ((179 - 10 * (locator[0] - 'A') - (locator[2] - '0')) * 180) +   
+			(10 * (locator[1] - 'A')) + (locator[3] - '0');
+		m = (m * 128) + power + 64;
+	}
+	else if(slash_avail)   //so slash is supposed to be type 2, but if also had < then its trumped to type 3,
+	{
+		// Type 2 message
+		int slash_pos = slash_avail - callsign;
+    uint8_t i;
+
+		// Determine prefix or suffix
+		if(callsign[slash_pos + 2] == ' ' || callsign[slash_pos + 2] == 0)
+		{
+			//printf("BIT Packing single suffix \n");
+			// Single character suffix
+			char base_call[7];
+      memset(base_call, 0, 7);
+			strncpy(base_call, callsign, slash_pos);
+			for(i = 0; i < 7; i++)
+			{
+				base_call[i] = toupper(base_call[i]);
+				if(!(isdigit(base_call[i]) || isupper(base_call[i])))
+				{
+					base_call[i] = ' ';
+				}
+			}
+			pad_callsign(base_call);
+
+			n = wspr_code(base_call[0]);
+			n = n * 36 + wspr_code(base_call[1]);
+			n = n * 10 + wspr_code(base_call[2]);
+			n = n * 27 + (wspr_code(base_call[3]) - 10);
+			n = n * 27 + (wspr_code(base_call[4]) - 10);
+			n = n * 27 + (wspr_code(base_call[5]) - 10);
+
+			char x = callsign[slash_pos + 1];
+			if(x >= 48 && x <= 57)
+			{
+				x -= 48;
+			}
+			else if(x >= 65 && x <= 90)
+			{
+				x -= 55;
+			}
+			else
+			{
+				x = 38;
+			}
+
+			m = 60000 - 32768 + x;
+
+			m = (m * 128) + power + 2 + 64;
+		}
+		else if(callsign[slash_pos + 3] == ' ' || callsign[slash_pos + 3] == 0)
+		{
+			// Two-digit numerical suffix
+			//printf("bit packingtwo digi t siffice \n");
+			char base_call[7];
+      memset(base_call, 0, 7);
+			strncpy(base_call, callsign, slash_pos);
+			for(i = 0; i < 6; i++)
+			{
+				base_call[i] = toupper(base_call[i]);
+				if(!(isdigit(base_call[i]) || isupper(base_call[i])))
+				{
+					base_call[i] = ' ';
+				}
+			}
+			pad_callsign(base_call);
+
+			n = wspr_code(base_call[0]);
+			n = n * 36 + wspr_code(base_call[1]);
+			n = n * 10 + wspr_code(base_call[2]);
+			n = n * 27 + (wspr_code(base_call[3]) - 10);
+			n = n * 27 + (wspr_code(base_call[4]) - 10);
+			n = n * 27 + (wspr_code(base_call[5]) - 10);
+
+			// TODO: needs validation of digit
+			m = 10 * (callsign[slash_pos + 1] - 48) + callsign[slash_pos + 2] - 48;
+			m = 60000 + 26 + m;
+			m = (m * 128) + power + 2 + 64;
+		}
+		else
+		{
+			// Prefix
+			//printf("BIT Packing this is prefix \n");
+			char prefix[4];
+			char base_call[7];
+            memset(prefix, 0, 4);
+            memset(base_call, 0, 7);
+			strncpy(prefix, callsign, slash_pos);
+			strncpy(base_call, callsign + slash_pos + 1, 7);
+
+			if(prefix[2] == ' ' || prefix[2] == 0)
+			{
+				// Right align prefix
+				prefix[3] = 0;
+				prefix[2] = prefix[1];
+				prefix[1] = prefix[0];
+				prefix[0] = ' ';
+			}
+
+			for(uint8_t i = 0; i < 6; i++)
+			{
+				base_call[i] = toupper(base_call[i]);
+				if(!(isdigit(base_call[i]) || isupper(base_call[i])))
+				{
+					base_call[i] = ' ';
+				}
+			}
+			pad_callsign(base_call);
+
+			n = wspr_code(base_call[0]);
+			n = n * 36 + wspr_code(base_call[1]);
+			n = n * 10 + wspr_code(base_call[2]);
+			n = n * 27 + (wspr_code(base_call[3]) - 10);
+			n = n * 27 + (wspr_code(base_call[4]) - 10);
+			n = n * 27 + (wspr_code(base_call[5]) - 10);
+
+			m = 0;
+			for(uint8_t i = 0; i < 3; ++i)
+			{
+				m = 37 * m + wspr_code(prefix[i]);
+			}
+
+			if(m >= 32768)
+			{
+				m -= 32768;
+				m = (m * 128) + power + 2 + 64;
+			}
+			else
+			{
+				m = (m * 128) + power + 1 + 64;
+			}
+		}
+	}
+
+  // Callsign is 28 bits, locator/power is 22 bits.
+	// A little less work to start with the least-significant bits
+	c[3] = (uint8_t)((n & 0x0f) << 4);
+	n = n >> 4;
+	c[2] = (uint8_t)(n & 0xff);
+	n = n >> 8;
+	c[1] = (uint8_t)(n & 0xff);
+	n = n >> 8;
+	c[0] = (uint8_t)(n & 0xff);
+
+	c[6] = (uint8_t)((m & 0x03) << 6);
+	m = m >> 2;
+	c[5] = (uint8_t)(m & 0xff);
+	m = m >> 8;
+	c[4] = (uint8_t)(m & 0xff);
+	m = m >> 8;
+	c[3] |= (uint8_t)(m & 0x0f);
+	c[7] = 0;
+	c[8] = 0;
+	c[9] = 0;
+	c[10] = 0;
+}
+
+void convolve(uint8_t * c, uint8_t * s, uint8_t message_size, uint8_t bit_size)
+{
+  uint32_t reg_0 = 0;
+  uint32_t reg_1 = 0;
+  uint32_t reg_temp = 0;
+  uint8_t input_bit, parity_bit;
+  uint8_t bit_count = 0;
+  uint8_t i, j, k;
+
+  for(i = 0; i < message_size; i++)
+  {
+    for(j = 0; j < 8; j++)
+    {
+      // Set input bit according the MSB of current element
+      input_bit = (((c[i] << j) & 0x80) == 0x80) ? 1 : 0;
+
+      // Shift both registers and put in the new input bit
+      reg_0 = reg_0 << 1;
+      reg_1 = reg_1 << 1;
+      reg_0 |= (uint32_t)input_bit;
+      reg_1 |= (uint32_t)input_bit;
+
+      // AND Register 0 with feedback taps, calculate parity
+      reg_temp = reg_0 & 0xf2d05351;
+      parity_bit = 0;
+      for(k = 0; k < 32; k++)
+      {
+        parity_bit = parity_bit ^ (reg_temp & 0x01);
+        reg_temp = reg_temp >> 1;
+      }
+      s[bit_count] = parity_bit;
+      bit_count++;
+
+      // AND Register 1 with feedback taps, calculate parity
+      reg_temp = reg_1 & 0xe4613c47;
+      parity_bit = 0;
+      for(k = 0; k < 32; k++)
+      {
+        parity_bit = parity_bit ^ (reg_temp & 0x01);
+        reg_temp = reg_temp >> 1;
+      }
+      s[bit_count] = parity_bit;
+      bit_count++;
+      if(bit_count >= bit_size)
+      {
+        break;
+      }
+    }
+  }
+}
+
+void wspr_interleave(uint8_t * s)
+{
+  uint8_t d[WSPR_BIT_COUNT];
+	uint8_t rev, index_temp, i, j, k;
+
+	i = 0;
+
+	for(j = 0; j < 255; j++)
+	{
+		// Bit reverse the index
+		index_temp = j;
+		rev = 0;
+
+		for(k = 0; k < 8; k++)
+		{
+			if(index_temp & 0x01)
+			{
+				rev = rev | (1 << (7 - k));
+			}
+			index_temp = index_temp >> 1;
+		}
+
+		if(rev < WSPR_BIT_COUNT)
+		{
+			d[rev] = s[i];
+			i++;
+		}
+
+		if(i >= WSPR_BIT_COUNT)
+		{
+			break;
+		}
+	}
+
+  memcpy(s, d, WSPR_BIT_COUNT);
+}
+
+void wspr_merge_sync_vector(uint8_t * g, uint8_t * symbols)
+{
+  uint8_t i;
+  const uint8_t sync_vector[WSPR_SYMBOL_COUNT] =
+	{1, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0,
+	 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0,
+	 0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1, 0, 1,
+	 0, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0,
+	 1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1,
+	 0, 0, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1,
+	 1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0,
+	 1, 1, 0, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0};
+
+	for(i = 0; i < WSPR_SYMBOL_COUNT; i++)
+	{
+		symbols[i] = sync_vector[i] + (2 * g[i]);
+	}
+}
+
+uint8_t wspr_code(char c)
+{
+  // Validate the input then return the proper integer code.
+  // Change character to a space if the char is not allowed.
+
+  if(isdigit(c))
+	{
+		return (uint8_t)(c - 48);
+	}
+	else if(c == ' ')
+	{
+		return 36;
+	}
+	else if(c >= 'A' && c <= 'Z')
+	{
+		return (uint8_t)(c - 55);
+	}
+	else
+	{
+		return 36;
+	}
+}
+
+void pad_callsign(char * call)
+{
+	// If only the 2nd character is a digit, then pad with a space.
+	// If this happens, then the callsign will be truncated if it is
+	// longer than 6 characters.
+	if(isdigit(call[1]) && isupper(call[2]))
+	{
+		// memmove(call + 1, call, 6);
+    call[5] = call[4];
+    call[4] = call[3];
+    call[3] = call[2];
+    call[2] = call[1];
+    call[1] = call[0];
+		call[0] = ' ';
+	}
+
+	// Now the 3rd charcter in the callsign must be a digit
+	// if(call[2] < '0' || call[2] > '9')
+	// {
+	// 	// return 1;
+	// }
+}

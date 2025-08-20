@@ -92,6 +92,8 @@
 #define WSPR_BIT_COUNT      162
 #define VALID_DBM_SIZE      28
 #define tempU (tempC*(9.0f/5.0f))+32
+
+
 ///////////// INCLUDES //////////////////////
 #pragma once
 
