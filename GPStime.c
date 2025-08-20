@@ -5,7 +5,8 @@
 //  PROJECT PAGE
 //  https://github.com/RPiks/pico-WSPR-tx
 ///////////////////////////////////////////////////////////////////////////////
-#include "GPStime.h"
+
+#include "defines.h"
 #include "timer_PIO.pio.h"
 
 

@@ -1,12 +1,9 @@
 /*seems this code originated from https://github.com/sp6q/maidenhead */
-#include "maidenhead.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+
 
 char letterize(int x) {
 	if (x<24)
@@ -85,6 +82,3 @@ double mh2lat(char* locator) {
     return field + square + subsquare + extsquare + precsquare - 90;
 }
 
-#ifdef __cplusplus
-}
-#endif

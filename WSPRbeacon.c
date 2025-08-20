@@ -5,15 +5,13 @@
 //  PROJECT PAGE
 //  https://github.com/RPiks/pico-WSPR-tx
 ///////////////////////////////////////////////////////////////////////////////
-#include "WSPRbeacon.h"
-#include <WSPRutility.h>
-#include <maidenhead.h>
+#include "defines.h"
 #include <math.h>
 #include "pico/sleep.h"      
 #include "hardware/rtc.h" 
 #include "hardware/watchdog.h"
 #include "pico/multicore.h"
-#include "pico_fractional_pll.h"
+
 
 static char grid5;
 static char grid6;

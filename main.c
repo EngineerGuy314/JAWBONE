@@ -13,11 +13,8 @@
 #include <ctype.h>
 #include "pico/multicore.h"
 #include "hardware/flash.h"
-#include "WSPRbeacon.h"
 #include "defines.h"
-#include <protos.h>
 #include <math.h>
-#include <utilities.h>
 #include "pico/stdlib.h"
 #include "hardware/watchdog.h"
 #include "hardware/uart.h"
@@ -27,7 +24,6 @@
 #include "onewire/onewire_library.h"    // onewire library functions
 #include "onewire/ow_rom.h"             // onewire ROM command codes
 #include "onewire/ds18b20.h"            // ds18b20 function codes
-#include "pico_fractional_pll.h"
 
 
 WSPRbeaconContext *pWSPR;

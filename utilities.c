@@ -7,7 +7,7 @@
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
 #include "hardware/adc.h"   
-#include "TxChannel.h"
+
 
 
 void get_user_input(const char *prompt, char *input_variable, int max_length) {

@@ -5,7 +5,7 @@
   https://github.com/kaduhi/pico-fractional-pll
 */
 
-#include "pico_fractional_pll.h"
+#include "defines.h"
 
 #include "pico/multicore.h"
 

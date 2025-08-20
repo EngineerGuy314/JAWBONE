@@ -1,7 +1,6 @@
 
 
-#include "TxChannel.h"
-#include "pico_fractional_pll.h"
+#include "defines.h"
 
 static TxChannelContext *spTX = NULL;
 

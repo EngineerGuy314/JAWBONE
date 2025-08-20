@@ -200,7 +200,7 @@ Use for hash table lookup, or anything where one collision in 2^^32 is
 acceptable.  Do NOT use for cryptographic purposes.
 -------------------------------------------------------------------------------
 */
-uint32_t nhash_( const void *, int *, uint32_t *);
+
 
 //uint32_t hashlittle( const void *key, size_t length, uint32_t initval)
 #ifdef STDCALL

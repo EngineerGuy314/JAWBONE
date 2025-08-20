@@ -7,13 +7,13 @@
 
 #include "hardware/clocks.h"
 #include "pico/stdlib.h"
+#include "defines.h"
 
 #define BUFFER_SIZE 256
 
 static char logBuffer[BUFFER_SIZE] = {0};
 
-void StampPrintf(const char* pformat, ...);
-void DoLogPrint();
+
 
 void StampPrintf(const char* pformat, ...)
 {
