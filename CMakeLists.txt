@@ -29,7 +29,6 @@ pico_generate_pio_header(JAWBONE ${CMAKE_CURRENT_LIST_DIR}/onewire/onewire_libra
 target_sources(JAWBONE PUBLIC
                ${CMAKE_CURRENT_LIST_DIR}/logutils.c
                ${CMAKE_CURRENT_LIST_DIR}/utilities.c
-               ${CMAKE_CURRENT_LIST_DIR}/nhash.c
                ${CMAKE_CURRENT_LIST_DIR}/WSPRutility.c
 			   ${CMAKE_CURRENT_LIST_DIR}/pico_fractional_pll.c
                ${CMAKE_CURRENT_LIST_DIR}/GPStime.c
