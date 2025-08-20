@@ -10,18 +10,9 @@
 //#define PLL_SYS_MHZ 270UL//115UL // This sets CPU speed. Roman originally had 270UL. 
       // After improvement od RfGenStruct we are now on 115 MHz (for 20m band) :-)     
 
-// Serial data from GPS module wired to UART0 RX, GPIO 1 (pin 2 on pico). on custom PCB its uart1, GPIO9. taken care of in main.c
+// Serial data from GPS module wired to uart1, GPIO9. 
 
-		/* default pin definition when building on a Pico */
-#define GPS_PPS_PIN_default 2          /* GPS time mark PIN. (labeled PPS on GPS module)*/ //its not actually PIN 2, its GPIO 2, which is physical pin 4 on pico
-#define RFOUT_PIN_default 21            /* RF output PIN.  This CANNOT be changed because of reasons*/      //its not actually PIN 21, its GPIO 21,
-#define GPS_ENABLE_PIN_default 5       /* GPS_ENABLE pin - high to enable GPS (needs a MOSFET ie 2N7000 on low side drive */    //its not actually PIN 5, its GPIO 5, which is physical pin 7 on pico
-#define GPS_ALT_ENABLE_LOW_SIDE_DRIVE_BASE_IO_PIN 10  /* GPS_ENABLE pins, (alternate). GPIO 10 11 and 12, wired in parallel, to directly low-side-drive the GPS module instead of using a MOSFET */	
-#define ONEWIRE_bus_pin 27 
-
-		/* pin definitions when using custom PCB board */
-#define GPS_PPS_PIN_pcb 17          /* GPS time mark PIN. (labeled PPS on GPS module)*/ //its not actually PIN 2, its GPIO 2, which is physical pin 4 on pico
-#define RFOUT_PIN_pcb 21            /* RF output PIN.  This CANNOT be changed because of reasons*/   //its not actually PIN 21, its GPIO 21,
+		/* pin definitions  */
 #define GPS_ENABLE_PIN_pcb 16       /* GPS_ENABLE pin, when using custom PCB. inverse logic */  
 #define ONEWIRE_bus_pin_pcb 27 
 
@@ -362,7 +353,7 @@ int calc_solar_angle(int hour, int min, int64_t int_lat, int64_t int_lon);
 
 // GPS TIME
 
-GPStimeContext *GPStimeInit(int uart_id, int uart_baud, uint32_t clock_speed);
+GPStimeContext *GPStimeInit(int uart_baud);
 void GPStimeDestroy(GPStimeContext **pp);
 int parse_GPS_data(GPStimeContext *pg);
 void RAM (GPStimeUartRxIsr)();

@@ -71,6 +71,7 @@ const uint32_t freqs[14] =   							//A:LF,B:MF,C:160,D:80,E:60,F:40,G:30,H:20,I
 
 int main()
 {
+	
 	StampPrintf("\n");DoLogPrint(); // needed asap to wake up the USB stdio port (because StampPrintf includes stdio_init_all();). why though?
 	for (int i=0;i < 20;i++) {printf("*");sleep_ms(100);}			
 	gpio_init(LED_PIN); 
@@ -117,6 +118,21 @@ int main()
 	set_sys_clock_khz( Main_System_Clock_Speed* 1000, true);
 	
 	InitPicoPins();			// Sets GPIO pins roles and directions and also ADC for voltage and temperature measurements (NVRAM must be read BEFORE this, otherwise dont know how to map IO)
+
+
+
+
+
+	
+	gpio_init(5);   //only needed for temp running oif kazus board
+	gpio_set_dir(5, GPIO_OUT); 
+	gpio_put(5, 1); 
+	gpio_init(6);   //only needed for temp running oif kazus board
+	gpio_set_dir(6, GPIO_OUT); 
+	gpio_put(6, 1); 
+
+
+
 	I2C_init();
     printf("\nThe JAWBONE version: %s %s\nWSPR beacon init...",__DATE__ ,__TIME__);	//messages are sent to USB serial port, 115200 baud
 	int band_as_int=_band[0]-'A';   
@@ -151,8 +167,7 @@ int main()
 	pWB->_txSched.oscillatorOff=(uint8_t)_oscillator[0]-'0';
 	pWB->_txSched.low_power_mode=(uint8_t)_battery_mode[0]-'0';
 	strcpy(pWB->_txSched.id13,_id13);
-	int uart_number=(uint8_t)_custom_PCB[0]-'0';  //custom PCB uses Uart 1 if selected, otherwise uart 0
-	RfGen._pGPStime = GPStimeInit(uart_number, 9600, Main_System_Clock_Speed); //the 0 defines uart0, so the RX is GPIO 1 (pin 2 on pico). TX to GPS module not needed
+	RfGen._pGPStime = GPStimeInit(9600); 
 	RfGen._pGPStime->user_setup_menu_active=0;
 	RfGen._pGPStime->forced_XMIT_on=force_transmit;
 	RfGen._pGPStime->verbosity=(uint8_t)_verbosity[0]-'0';   
@@ -714,32 +729,14 @@ void InitPicoPins(void)
 /*  gpio_init(18); 
 	gpio_set_dir(18, GPIO_OUT); //GPIO 18 used for fan control when testing TCXO stability */
 
-	int use_custom_PCB_mappings=(uint8_t)_custom_PCB[0]-'0'; 
-	if (use_custom_PCB_mappings==0)                            //do not use parallel IO low-side drive if using custom PCB
-	{		
-	GPS_PPS_PIN = GPS_PPS_PIN_default;
-	RFOUT_PIN = RFOUT_PIN_default;
-	GPS_ENABLE_PIN = GPS_ENABLE_PIN_default;
-	gpio_init(GPS_ENABLE_PIN); gpio_set_dir(GPS_ENABLE_PIN, GPIO_OUT); //initialize GPS enable output 
-	gpio_put(GPS_ENABLE_PIN, 1);   //turn on output to enable the MOSFET
-	gpio_init(GPS_ALT_ENABLE_LOW_SIDE_DRIVE_BASE_IO_PIN); gpio_set_dir(GPS_ALT_ENABLE_LOW_SIDE_DRIVE_BASE_IO_PIN, GPIO_OUT); //alternate way to enable the GPS is to pull down its ground (aka low-side drive) using 3 GPIO in parallel (no mosfet needed). 2 do: make these non-hardcoded
-	gpio_init(GPS_ALT_ENABLE_LOW_SIDE_DRIVE_BASE_IO_PIN+1); gpio_set_dir(GPS_ALT_ENABLE_LOW_SIDE_DRIVE_BASE_IO_PIN+1, GPIO_OUT); //no need to actually write a value to these outputs. Just enabling them as outputs is fine, they default to the off state when this is done. perhaps thats a dangerous assumption? 
-	gpio_init(GPS_ALT_ENABLE_LOW_SIDE_DRIVE_BASE_IO_PIN+2); gpio_set_dir(GPS_ALT_ENABLE_LOW_SIDE_DRIVE_BASE_IO_PIN+2, GPIO_OUT);
-	gpio_for_onewire=ONEWIRE_bus_pin;
-	}
-	
-		else                          //if using custom PCB 
-		{	
+
 			gpio_for_onewire=ONEWIRE_bus_pin_pcb;
-			GPS_PPS_PIN = GPS_PPS_PIN_pcb;
-			RFOUT_PIN = RFOUT_PIN_pcb;
+
 			GPS_ENABLE_PIN = GPS_ENABLE_PIN_pcb;
 			gpio_init(GPS_ENABLE_PIN); gpio_set_dir(GPS_ENABLE_PIN, GPIO_OUT); //initialize GPS enable output (INVERSE LOGIC on custom PCB, so just initialize it, leave it at zero state)	
 
-			gpio_init(6); gpio_set_dir(6, GPIO_OUT);gpio_put(6, 1); //these are required ONLY for v0.1 of custom PCB (ON/OFF and nReset of GPS module, which later are just left disconnected)
-			gpio_init(5); gpio_set_dir(5, GPIO_OUT);gpio_put(5, 1); //these are required ONLY for v0.1 of custom PCB (ON/OFF and nReset of GPS module, which later are just left disconnected)
-
-	}
+			
+	
 
 	dallas_setup();  //configures one-wire interface. Enabled pullup on one-wire gpio. must do this here, in case they want to use analog instead, because then pullup needs to be disabled below.
 
@@ -1065,11 +1062,7 @@ void datalog_loop()
 
 				printf("About to sleep!\n");
 				gpio_set_dir(GPS_ENABLE_PIN, GPIO_IN);  //let the mosfet drive float
-				gpio_set_dir(GPS_ALT_ENABLE_LOW_SIDE_DRIVE_BASE_IO_PIN, GPIO_IN); 
-				gpio_set_dir(GPS_ALT_ENABLE_LOW_SIDE_DRIVE_BASE_IO_PIN+1, GPIO_IN); 
-				gpio_set_dir(GPS_ALT_ENABLE_LOW_SIDE_DRIVE_BASE_IO_PIN+2, GPIO_IN); 
-				gpio_put(6, 0); //these are required ONLY for v0.1 of custom PCB (ON/OFF and nReset of GPS module, which later are just left disconnected)
-				gpio_put(5, 0);
+
 
 				go_to_sleep();
 

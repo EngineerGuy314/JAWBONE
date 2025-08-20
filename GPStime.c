@@ -17,29 +17,28 @@ static uint offset;
 static int32_t tics_per_second;
 static int32_t nanosecs_per_tick;
 
-GPStimeContext *GPStimeInit(int uart_id, int uart_baud, uint32_t clock_speed)
+GPStimeContext *GPStimeInit(int uart_baud)
 {
   
     // Set up our UART with the required speed & assign pins.
-    uart_init(uart_id ? uart1 : uart0, uart_baud);
-    gpio_set_function(uart_id ? 8 : 0, GPIO_FUNC_UART);
-    gpio_set_function(uart_id ? 9 : 1, GPIO_FUNC_UART);
+    uart_init(uart1, uart_baud);
+    gpio_set_function(8, GPIO_FUNC_UART);
+    gpio_set_function(9, GPIO_FUNC_UART);
     
     GPStimeContext *pgt = calloc(1, sizeof(GPStimeContext));
 
-    pgt->_uart_id = uart_id;
     pgt->_uart_baudrate = uart_baud;
 
     spGPStimeContext = pgt;
     spGPStimeData = &pgt->_time_data;
 
 
-    uart_set_hw_flow(uart_id ? uart1 : uart0, false, false);
-    uart_set_format(uart_id ? uart1 : uart0, 8, 1, UART_PARITY_NONE);
-    uart_set_fifo_enabled(uart_id ? uart1 : uart0, false);  //this turns off the internal FIFO and makes chas come in one at a time
-    irq_set_exclusive_handler(uart_id ? UART1_IRQ : UART0_IRQ, GPStimeUartRxIsr);
-    irq_set_enabled(uart_id ? UART1_IRQ : UART0_IRQ, true);
-    uart_set_irq_enables(uart_id ? uart1 : uart0, true, false);
+    uart_set_hw_flow(uart1, false, false);
+    uart_set_format(uart1, 8, 1, UART_PARITY_NONE);
+    uart_set_fifo_enabled(uart1, false);  //this turns off the internal FIFO and makes chas come in one at a time
+    irq_set_exclusive_handler(UART1_IRQ, GPStimeUartRxIsr);
+    irq_set_enabled(UART1_IRQ, true);
+    uart_set_irq_enables(uart1, true, false);
 
     return pgt;
 }
@@ -49,7 +48,7 @@ void GPStimeDestroy(GPStimeContext **pp)
 {
     spGPStimeContext = NULL;    /* Detach global context Ptr. */
     spGPStimeData = NULL;
-    uart_deinit((*pp)->_uart_id ? uart1 : uart0);
+    uart_deinit(uart1);
     free(*pp);
     *pp = NULL;
 }
@@ -62,7 +61,7 @@ void RAM (GPStimeUartRxIsr)()
 {
     if((spGPStimeContext))
     {
-		uart_inst_t *puart_id = spGPStimeContext->_uart_id ? uart1 : uart0;
+		uart_inst_t *puart_id = uart1;
         while (uart_is_readable(puart_id))
         {
             uint8_t chr = uart_getc(puart_id);
@@ -77,6 +76,7 @@ void RAM (GPStimeUartRxIsr)()
 		
 	   if(spGPStimeContext->_is_sentence_ready)
         {
+			printf("dump ALL RAW FIFO: %s",(char *)spGPStimeContext->_pbytebuff);           
 			spGPStimeContext->_u8_ixw = 0;     
 														if ((spGPStimeContext->verbosity>=8)&&(spGPStimeContext->user_setup_menu_active==0 ))  printf("dump ALL RAW FIFO: %s",(char *)spGPStimeContext->_pbytebuff);           
             spGPStimeContext->_is_sentence_ready =0;
