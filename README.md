@@ -13,16 +13,5 @@ I owe great thanks and acknowledgement to Roman Piksaykin (https://github.com/RP
 
 
 random notes:
-try 18Mhz w/set_sys_clock_khz() dont *need* to use PLL_SYS_MHZ macro
-wuz:
-void InitPicoClock(int PLL_SYS_MHZ)
-{
-    const uint32_t clkhz = PLL_SYS_MHZ * 1000000L;
-	 printf("\n ABOUT TO SET SYSTEM KLOCK TO %dMhz\n", PLL_SYS_MHZ); 
-	
-    set_sys_clock_khz(clkhz / kHz, true);
-
-    clock_configure(clk_peri, 0,
-                    CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
-                    PLL_SYS_MHZ * MHZ,
-                    PLL_SYS_MHZ * MHZ);
+try 18Mhz for best Klock speed?
+Optional_Debug bitmapping (MSB to LSB): .,.,.,.,.,.,.raw GPS dump

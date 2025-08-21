@@ -76,9 +76,12 @@ void RAM (GPStimeUartRxIsr)()
 		
 	   if(spGPStimeContext->_is_sentence_ready)
         {
-			printf("dump ALL RAW FIFO: %s",(char *)spGPStimeContext->_pbytebuff);           
+			
+				
 			spGPStimeContext->_u8_ixw = 0;     
 														if ((spGPStimeContext->verbosity>=8)&&(spGPStimeContext->user_setup_menu_active==0 ))  printf("dump ALL RAW FIFO: %s",(char *)spGPStimeContext->_pbytebuff);           
+														if (spGPStimeContext->Optional_Debug&(1<<0)) printf("%s",(char *)spGPStimeContext->_pbytebuff);    //zeroeth bit in optional debug dumps all GPS       
+														
             spGPStimeContext->_is_sentence_ready =0;
 			spGPStimeContext->_i32_error_count -= parse_GPS_data(spGPStimeContext);
         }

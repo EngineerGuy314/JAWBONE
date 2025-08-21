@@ -57,16 +57,7 @@ static void sleep_callback(void) {
     printf("RTC woke us up\n");
 }
 /// @brief Initializes a new WSPR beacon context.
-/// @param pcallsign HAM radio callsign, 12 chr max.
-/// @param pgridsquare Maidenhead locator, 7 chr max.
-/// @param txpow_dbm TX power, db`mW.
-/// @param pdco Ptr to working DCO.
-/// @param dial_freq_hz The begin of working WSPR passband.
-/// @param shift_freq_hz The shift of tx freq. relative to dial_freq_hz.
-/// @param gpio Pico's GPIO pin of RF output.
-/// @return Ptr to the new context.
-/// @bug The function sets schedule hardcoded to minutes 1, 2 and 3. It may lead to 
-/// @bug out of schedule transmits if the device is switched on around minute 0  
+
 WSPRbeaconContext *WSPRbeaconInit(const char *pcallsign, const char *pgridsquare, int txpow_dbm, uint32_t dial_freq_hz, uint32_t shift_freq_hz,
                                   int gpio,  uint8_t start_minute, uint8_t id13, uint8_t suffix, const char *DEXT_config,RfGenStruct *RfGen)
 {
@@ -271,13 +262,7 @@ else
 	{
 		for (int i=0;i < 10;i++) oneshots[i]=0;
 		at_least_one_slot_has_elapsed=1;  
-		if (pctx->_txSched.oscillatorOff && schedule[(current_minute+9)%10]==-1)    // if we want to switch oscillator off and are in non sheduled interval 
-		{
-			transmitter_status=0; 
-			//wuz stop XMIT
-			/*pico_fractional_pll_enable_output(false);
-			pico_fractional_pll_deinit();*/
-		}
+
 	}
 	
 	else if (is_GPS_available && at_least_one_slot_has_elapsed 

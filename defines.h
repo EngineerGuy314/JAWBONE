@@ -13,11 +13,11 @@
 // Serial data from GPS module wired to uart1, GPIO9. 
 
 		/* pin definitions  */
-#define GPS_ENABLE_PIN_pcb 16       /* GPS_ENABLE pin, when using custom PCB. inverse logic */  
+#define GPS_ENABLE_PIN 16       /* GPS_ENABLE pin, inverse logic */  
+#define VFO_ENABLE_PIN 4       /* 18 on my board!! VFO synthesizer ENABLE pin, inverse logic */  
 #define ONEWIRE_bus_pin_pcb 27 
 
 #define LED_PIN  25 /* 25 for pi pico, 13 for Waveshare rp2040-zero  */
-#define PADS_BANK0_GPIO0_SLEWFAST_FAST 1u // value for fast slewrate of pad
 #define FLASH_TARGET_OFFSET (256 * 1024) //leaves 256k of space for the program
 #define CONFIG_LOCATOR4 "AA22AB"       	       //gets overwritten by gps data anyway       
 
@@ -77,8 +77,7 @@
 #define WSPR_FREQ_STEP_MILHZ    2930UL     /* FSK freq.bin (*2 this time). */
 #define WSPR_MAX_GPS_DISCONNECT_TM  \
         (6 * HOUR)                      /* How long is active without GPS. */
-		
-		
+			
 #define WSPR_SYMBOL_COUNT   162
 #define WSPR_BIT_COUNT      162
 #define VALID_DBM_SIZE      28
@@ -157,6 +156,7 @@ typedef struct
 	uint8_t forced_XMIT_on;
 	int8_t temp_in_Celsius;
 	int8_t verbosity;
+    int8_t Optional_Debug;
 
 } GPStimeContext;
 
@@ -197,10 +197,10 @@ typedef struct
     char id13[3];
     int8_t temp_in_Celsius;
 	int8_t verbosity;
+    int8_t Optional_Debug;	
     double voltage;
     double voltage_at_idle;
     double voltage_at_xmit;
-    int8_t oscillatorOff;
 	uint32_t TELEN1_val1;
 	uint32_t TELEN1_val2;
 	uint32_t TELEN2_val1;

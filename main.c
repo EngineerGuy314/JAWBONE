@@ -34,7 +34,7 @@ char _start_minute[2];
 char _lane[2];
 char _suffix[2];
 char _verbosity[2];
-char _oscillator[2];
+char _Optional_Debug[4];
 char _custom_PCB[2];   
 char _DEXT_config[5];     
 char _battery_mode[2];
@@ -49,7 +49,6 @@ static uint32_t telen_values[4];  //consolodate in an array to make coding easie
 static absolute_time_t LED_sequence_start_time;
 static int GPS_PPS_PIN;     //these get set based on values in defines.h, and also if custom PCB selected in user menu
 int RFOUT_PIN;            //will be fixed at 21 to use Kazu's fraction-pll
-static int GPS_ENABLE_PIN;
 int Main_System_Clock_Speed;
 uint gpio_for_onewire;
 int force_transmit = 0;
@@ -74,16 +73,11 @@ int main()
 	
 	StampPrintf("\n");DoLogPrint(); // needed asap to wake up the USB stdio port (because StampPrintf includes stdio_init_all();). why though?
 	for (int i=0;i < 20;i++) {printf("*");sleep_ms(100);}			
-	gpio_init(LED_PIN); 
-	gpio_set_dir(LED_PIN, GPIO_OUT); //initialize LED output
+ 
+	gpio_init(LED_PIN);	gpio_set_dir(LED_PIN, GPIO_OUT); //initialize LED output
 		
 	for (int i=0;i < 20;i++)     //do some blinky on startup, allows time for power supply to stabilize before GPS unit enabled
-		{
-			gpio_put(LED_PIN, 1); 
-			sleep_ms(100);
-			gpio_put(LED_PIN, 0);
-			sleep_ms(100);
-		}
+		{gpio_put(LED_PIN, 1); sleep_ms(100);gpio_put(LED_PIN, 0);sleep_ms(100);}
 
 	read_NVRAM();				//reads values of _callsign,  _verbosity etc from NVRAM. MUST READ THESE *BEFORE* InitPicoPins
 	if (check_data_validity()==-1)  //if data was bad, breathe LED for 10 seconds and reboot. or if user presses a key enter setup
@@ -149,10 +143,11 @@ int main()
 	pWB->_txSched.led_mode = 0;  //0 means no serial comms from  GPS (critical fault if it remains that way)
 	pWB->_txSched.verbosity=(uint8_t)_verbosity[0]-'0';       /**< convert ASCI digit to int  */
 	pWB->_txSched.suffix=(uint8_t)_suffix[0]-'0';    /**< convert ASCI digit to int (value 253 if dash was entered) */
-	pWB->_txSched.oscillatorOff=(uint8_t)_oscillator[0]-'0';
+	pWB->_txSched.Optional_Debug=(uint8_t)atoi(_Optional_Debug);
+	RfGen._pGPStime = GPStimeInit(9600); 
+	RfGen._pGPStime->Optional_Debug=(uint8_t)atoi(_Optional_Debug);
 	pWB->_txSched.low_power_mode=(uint8_t)_battery_mode[0]-'0';
 	strcpy(pWB->_txSched.id13,_id13);
-	RfGen._pGPStime = GPStimeInit(9600); 
 	RfGen._pGPStime->user_setup_menu_active=0;
 	RfGen._pGPStime->forced_XMIT_on=force_transmit;
 	RfGen._pGPStime->verbosity=(uint8_t)_verbosity[0]-'0';   
@@ -164,13 +159,12 @@ int main()
     {		
 		onewire_read();
 		I2C_read();
-		
 		if(WSPRbeaconIsGPSsolutionActive(pWB))
 			{
 				char *pgps_qth = WSPRbeaconGetLastQTHLocator(pWB);  //GET MAIDENHEAD       - this code in original fork wasnt working due to error in WSPRbeacon.c
 				if(pgps_qth)
 					strncpy(pWB->_pu8_locator, pgps_qth, 6);     //does full 6 char maidenhead 									 
-				if (pWSPR->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count > pWSPR->_txSched.max_sats_seen_today) pWSPR->_txSched.max_sats_seen_today=pWSPR->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count;
+			if (pWSPR->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count > pWSPR->_txSched.max_sats_seen_today) pWSPR->_txSched.max_sats_seen_today=pWSPR->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count;
 			}        
         WSPRbeaconTxScheduler(pWB, YES);   
                 
@@ -400,7 +394,6 @@ printf("rtc clock: %.4f MHz\n", clock_get_hz(clk_rtc)/1000000.0);
 printf("ref clock: %.2f MHz\n", clock_get_hz(clk_ref)/1000000.0);
 printf("Peri clock: %.2f MHz (UART,I2C, etc) GETS FORCED by the SDK TO 48MHZ whenever main sys is changed, because of reasons Grok cant explain\n", clock_get_hz(clk_peri)/1000000.0);
 
-
 printf("\n================================================================================\n");
 
 printf(RED);printf("press anykey to continue");printf(NORMAL); 
@@ -460,7 +453,7 @@ show_values();          /* shows current VALUES  AND list of Valid Commands */
     for(;;)
 	{	
 																 printf(UNDERLINE_ON);printf(BRIGHT);
-		printf("\nEnter the command (X,C,S,U,B,V,P,T,B,F):");printf(UNDERLINE_OFF);printf(NORMAL);	
+		printf("\nEnter the command (X,C,S,U,B,V,P,T,B,F,O):");printf(UNDERLINE_OFF);printf(NORMAL);	
 		c=getchar_timeout_us(60000000);		   //just in case user setup menu was enterred during flight, this will reboot after 60 secs
 		printf("%c\n", c);
 		if (c==PICO_ERROR_TIMEOUT) {printf(CLEAR_SCREEN);printf("\n\n TIMEOUT WAITING FOR INPUT, REBOOTING FOR YOUR OWN GOOD!\n");sleep_ms(100);watchdog_enable(100, 1);for(;;)	{}}
@@ -478,8 +471,8 @@ show_values();          /* shows current VALUES  AND list of Valid Commands */
 			case 'L':get_user_input("Enter Lane (1,2,3,4): ", _lane, sizeof(_lane)); write_NVRAM(); break; //still possible but not listed or recommended 
 */
 			case 'V':get_user_input("Verbosity level (0-9): ", _verbosity, sizeof(_verbosity)); write_NVRAM(); break;
-			/*case 'O':get_user_input("Oscillator off (0,1): ", _oscillator, sizeof(_oscillator)); write_NVRAM(); break;*/
-			case 'P':get_user_input("custom Pcb mode (0,1): ", _custom_PCB, sizeof(_custom_PCB)); write_NVRAM(); break;
+			case 'O':get_user_input("Optional debug (0-255 bitmapped): ", _Optional_Debug, sizeof(_Optional_Debug)); write_NVRAM(); break;
+//			case 'P':get_user_input("custom Pcb mode (0,1): ", _custom_PCB, sizeof(_custom_PCB)); write_NVRAM(); break;
 			//case 'H':get_user_input("band Hop mode (0,1): ", _band_hop, sizeof(_band_hop)); write_NVRAM(); break;
 			case 'T':show_TELEN_msg();get_user_input("Telemetry (dexT) config: ", _DEXT_config, sizeof(_DEXT_config)-1); convertToUpperCase(_DEXT_config); write_NVRAM(); break;
 			//case 'B':get_user_input("Battery mode (0,1): ", _battery_mode, sizeof(_battery_mode)); write_NVRAM(); break;
@@ -536,7 +529,7 @@ strncpy(_start_minute, flash_target_contents+8, 1);
 strncpy(_lane, flash_target_contents+9, 1);
 strncpy(_suffix, flash_target_contents+10, 1);
 strncpy(_verbosity, flash_target_contents+11, 1);
-strncpy(_oscillator, flash_target_contents+12, 1);
+//strncpy(_Optional_Debug, flash_target_contents+12, 1); MOVED TO END BNECAUSE IT SBIGGER NOW
 strncpy(_custom_PCB, flash_target_contents+13, 1);
 strncpy(_DEXT_config, flash_target_contents+14, 4); //only needs 3, kept at 4 for historical ease
 strncpy(_battery_mode, flash_target_contents+18, 1);
@@ -546,7 +539,7 @@ strncpy(_Datalog_mode, flash_target_contents+22, 1);
 strncpy(_U4B_chan, flash_target_contents+23, 3); _U4B_chan[3]=0; //null terminate cause later will use atoi
 strncpy(_band_hop, flash_target_contents+26, 1);
 strncpy(_band, flash_target_contents+27, 1);
- 
+strncpy(_Optional_Debug, flash_target_contents+28, 3);
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -564,7 +557,7 @@ void write_NVRAM(void)
 	strncpy(data_chunk+9,_lane, 1);
 	strncpy(data_chunk+10,_suffix, 1);
 	strncpy(data_chunk+11,_verbosity, 1);
-	strncpy(data_chunk+12,_oscillator, 1);
+	//strncpy(data_chunk+12,_Optional_Debug, 1);  MOVED TO END BECAUSE ITS BIGGER NOW
 	strncpy(data_chunk+13,_custom_PCB, 1);
 	strncpy(data_chunk+14,_DEXT_config, 4);  //only needs 3, kept at 4 for historical ease
 	strncpy(data_chunk+18,_battery_mode, 1);
@@ -573,7 +566,7 @@ void write_NVRAM(void)
 	strncpy(data_chunk+23,_U4B_chan, 3);
 	strncpy(data_chunk+26,_band_hop, 1);
 	strncpy(data_chunk+27,_band, 1);
-	
+	strncpy(data_chunk+28,_Optional_Debug, 3);
 
 	uint32_t ints = save_and_disable_interrupts();
     flash_range_erase(FLASH_TARGET_OFFSET, FLASH_SECTOR_SIZE);  //a "Sector" is 4096 bytes             FLASH_TARGET_OFFSET,FLASH_SECTOR_SIZE,FLASH_PAGE_SIZE = 040000x, 4096, 256
@@ -584,8 +577,8 @@ void write_NVRAM(void)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
  * @brief Checks validity of user settings and if something is wrong, it sets "factory defaults"
- * and writes it back to NVRAM
- * 
+ * This is ONLY called when explicitly enterring the user-setup menu. It will NOT be called, and no values will be changed, on regular reboot
+ * this is to give a bad EEPROM read in morning a chance to reboot and still work correctly
  */
 void check_data_validity_and_set_defaults(void)
 {
@@ -596,7 +589,8 @@ void check_data_validity_and_set_defaults(void)
 	if ( (_start_minute[0]!='0') && (_start_minute[0]!='2') && (_start_minute[0]!='4')&& (_start_minute[0]!='6')&& (_start_minute[0]!='8')) {_start_minute[0]='0'; write_NVRAM();}
 	if ( (_lane[0]!='1') && (_lane[0]!='2') && (_lane[0]!='3')&& (_lane[0]!='4')) {_lane[0]='2'; write_NVRAM();}
 	if ( (_verbosity[0]<'0') || (_verbosity[0]>'9')) {_verbosity[0]='1'; write_NVRAM();} //set default verbosity to 1
-	if ( (_oscillator[0]<'0') || (_oscillator[0]>'1')) {_oscillator[0]='1'; write_NVRAM();} //set default oscillator to switch off after the trasmission
+	if ( (atoi(_Optional_Debug)<0) || (atoi(_Optional_Debug)>255)) {strcpy(_Optional_Debug,"0"); _Optional_Debug[1]=0;write_NVRAM();} 
+	if (atoi(_Optional_Debug)==0) {strcpy(_Optional_Debug,"0"); _Optional_Debug[1]=0;}  //this is an anti-stupid in case _Optional_Debug has alpha (non numeric) content. atoi still evalues any alpha as zero, this makes damn sure that if its zero, its really a zero character in the variable. Doesnt do write_NVRAM, because somethig else will prolly do it anyway.
 	if ( (_custom_PCB[0]<'0') || (_custom_PCB[0]>'1')) {_custom_PCB[0]='0'; write_NVRAM();} //set default IO mapping to original Pi Pico configuration
 	if ( (_DEXT_config[0]<'0') || (_DEXT_config[0]>'F')) {strncpy(_DEXT_config,"---",3); write_NVRAM();}
 	if ( (_battery_mode[0]<'0') || (_battery_mode[0]>'1')) {_battery_mode[0]='0'; write_NVRAM();} //
@@ -607,7 +601,6 @@ void check_data_validity_and_set_defaults(void)
 	if ( (_band[0]<'F') || (_band[0]>'M')) {_band[0]='H'; write_NVRAM();} //
 
 //certain modes have been hidden. following lines make sure they are not accidentally enabled from data corruption
-_oscillator[0]='1';
 _battery_mode[0]='0';
 _Datalog_mode[0]='0';
 _band_hop[0]='0'; 
@@ -629,7 +622,7 @@ int result=1;
 	if ( (_start_minute[0]!='0') && (_start_minute[0]!='2') && (_start_minute[0]!='4')&& (_start_minute[0]!='6')&& (_start_minute[0]!='8')) {result=-1;}
 	if ( (_lane[0]!='1') && (_lane[0]!='2') && (_lane[0]!='3')&& (_lane[0]!='4')) {result=-1;}
 	if ( (_verbosity[0]<'0') || (_verbosity[0]>'9')) {result=-1;} 
-	if ( (_oscillator[0]<'0') || (_oscillator[0]>'1')) {result=-1;} 
+	if ( (atoi(_Optional_Debug)<0) || (atoi(_Optional_Debug)>255)) {result=-1;} 
 	if ( (_custom_PCB[0]<'0') || (_custom_PCB[0]>'1')) {result=-1;} 
 	if ( ((_DEXT_config[0]<'0') || (_DEXT_config[0]>'F'))&& (_DEXT_config[0]!='-')) {result=-1;}
 	if ( (_battery_mode[0]<'0') || (_battery_mode[0]>'1')) {result=-1;} 	
@@ -665,8 +658,8 @@ printf(" Start Minute:%s",_start_minute);
 printf(" Lane:%s)\n\t",_lane);
 printf("Band:%s (%d Hz)\n\t",_band,freqs[band_as_int]);
 printf("Verbosity:%s\n\t",_verbosity);
-/*printf("Oscillator Off:%s\n\t",_oscillator);*/
-printf("custom Pcb IO mappings:%s\n\t",_custom_PCB);
+printf("Optional debug:%s\n\t",_Optional_Debug);
+//printf("custom Pcb IO mappings:%s\n\t",_custom_PCB);
 printf("Telemetry config:%s   (please set to '---' if unused)\n\t",_DEXT_config);
 printf("Klock speed (temp) :%sMhz  \n",_Klock_speed);
 /*printf("Datalog mode:%s\n\t",_Datalog_mode);
@@ -683,8 +676,8 @@ printf("B: change Band (F-M) default 20M is H\n\t");
 /*printf("I: change Id13 (two alpha numeric chars, ie Q8) use '--' to disable U4B\n\t");
 printf("M: change starting Minute (0,2,4,6,8)\n\tL: Lane (1,2,3,4) corresponding to 4 frequencies in 20M band\n\t");*/ //it is still possible to directly change these, but its not shown
 printf("V: Verbosity level (0 for no messages, 9 for too many) \n\t");
-/*printf("O: Oscillator off after trasmission (default: 1) \n\t");*/
-printf("P: custom Pcb mode IO mappings (0,1)\n\t");
+printf("O: Optional debug functions (bitmapped 0 - 255) \n\t");
+//printf("P: custom Pcb mode IO mappings (0,1)\n\t");
 printf("T: Telemetry (dexT) config\n\t");
 printf("K: Klock speed  \n\t");
 //printf("D: Datalog mode (0,1,(W)ipe memory, (D)ump memory) see wiki\n\t");
@@ -714,21 +707,20 @@ void InitPicoPins(void)
 /*  gpio_init(18); 
 	gpio_set_dir(18, GPIO_OUT); //GPIO 18 used for fan control when testing TCXO stability */
 
-
 			gpio_for_onewire=ONEWIRE_bus_pin_pcb;
-
-			GPS_ENABLE_PIN = GPS_ENABLE_PIN_pcb;
-			gpio_init(GPS_ENABLE_PIN); gpio_set_dir(GPS_ENABLE_PIN, GPIO_OUT); //initialize GPS enable output (INVERSE LOGIC on custom PCB, so just initialize it, leave it at zero state)	
-
 			
+			gpio_init(GPS_ENABLE_PIN); gpio_set_dir(GPS_ENABLE_PIN, GPIO_OUT); //initialize GPS enable output (INVERSE LOGIC on custom PCB, so just initialize it, leave it at zero state)	
+			gpio_init(VFO_ENABLE_PIN); gpio_set_dir(VFO_ENABLE_PIN, GPIO_OUT); //initialize VFO synth enable output (INVERSE LOGIC on custom PCB)
+			
+
+
+			//CAUTION! this turn them BOTH on, you will want to change this!! wuz
+
 	
-
 	dallas_setup();  //configures one-wire interface. Enabled pullup on one-wire gpio. must do this here, in case they want to use analog instead, because then pullup needs to be disabled below.
-
 	for (int i=0;i < 3;i++)   //init ADC(s) as needed for TELEN
 		{			
-/* 
-			removed (temporarily) Jane 2025 because 0 1 and 2 are used for custome DEXT messages, NOT actual ADC channel reads. ADC chan initiation needs to be done if/when you use a DEXt that includes analog. I dont think thats implemented yet
+/* 		removed (temporarily) Jane 2025 because 0 1 and 2 are used for custome DEXT messages, NOT actual ADC channel reads. ADC chan initiation needs to be done if/when you use a DEXt that includes analog. I dont think thats implemented yet
 
 		 switch(_DEXT_config[i])
 			{
@@ -747,25 +739,76 @@ void InitPicoPins(void)
     adc_set_temp_sensor_enabled(true); 	//Enable the onboard temperature sensor
 
 
-    // RF pins are initialised in /hf-oscillator/dco2.pio. Here is only pads setting
-    // trying to set the power of RF pads to maximum and slew rate to fast (Chapter 2.19.6.3. Pad Control - User Bank in the RP2040 datasheet)
-    // possible values: PADS_BANK0_GPIO0_DRIVE_VALUE_12MA, ..._8MA, ..._4MA, ..._2MA
-    // values of constants are the same for all the pins, so doesn't matter if we use PADS_BANK0_GPIO6_DRIVE_VALUE_12MA or ..._GPIO0_DRIVE...
-    /*  Measurements have shown that the drive value and slew rate settings do not affect the output power. Therefore, the lines are commented out.
-    hw_write_masked(&padsbank0_hw->io[RFOUT_PIN],
-                (PADS_BANK0_GPIO0_DRIVE_VALUE_12MA << PADS_BANK0_GPIO0_DRIVE_LSB) || PADS_BANK0_GPIO0_SLEWFAST_FAST,
-                PADS_BANK0_GPIO0_DRIVE_BITS || PADS_BANK0_GPIO0_SLEWFAST_BITS);           // first RF pin 
-    hw_write_masked(&padsbank0_hw->io[RFOUT_PIN+1],
-                (PADS_BANK0_GPIO0_DRIVE_VALUE_12MA << PADS_BANK0_GPIO0_DRIVE_LSB) || PADS_BANK0_GPIO0_SLEWFAST_FAST,
-                PADS_BANK0_GPIO0_DRIVE_BITS || PADS_BANK0_GPIO0_SLEWFAST_BITS);           // second RF pin
-    */            
+                
 
 }
 
-void I2C_init(void)   //this was used for testing HMC5883L compass module. keeping it here as a template for future I2C use
+void I2C_init(void)   
 {
-/*		
-    i2c_init(i2c_default, 100 * 1000);
+	
+	sleep_ms(100);
+	
+	// ALSO CHANGE i2c0 to i2c1 in all code below!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!111
+	/*i2c_init(i2c1, 100 * 1000); 			 //init at 100kHz
+    gpio_set_function(2, GPIO_FUNC_I2C);     //i2c1 on gpio 2 and 3
+    gpio_set_function(3, GPIO_FUNC_I2C);
+    gpio_pull_up(2);
+    gpio_pull_up(3);*/
+	
+									//for kazu board only!!! use above on JAWBONE!!!!!!!!!!!!
+	i2c_init(i2c0, 100 * 1000); 			 //init at 100kHz
+    gpio_set_function(12, GPIO_FUNC_I2C);     //i2c1 on gpio 2 and 3
+    gpio_set_function(13, GPIO_FUNC_I2C);
+    gpio_pull_up(12);
+    gpio_pull_up(13);
+	
+/*
+  printf("Scanning I2C bus...\n");
+	uint8_t dummy = 0;
+	for (uint8_t addr = 1; addr < 127; addr++) {
+		int ret = i2c_write_blocking(i2c1, addr, &dummy, 1, false);
+		if (ret >= 0) {
+			printf("Found device at 0x%02X\n", addr);
+		}
+	}
+    printf("Scan complete.\n"); */
+
+
+
+	uint8_t i2c_buf[6];
+    uint8_t config_buf[2];
+	uint8_t write_config_buf[2];
+	#define SI5351_ADDR 0x60  //for the MS5351 
+	
+    uint8_t reg; 
+
+//try a write
+	config_buf[0]=26;  
+	config_buf[1]=3;  
+	i2c_write_blocking(i2c0, SI5351_ADDR, config_buf, 2, false);  
+
+
+for (uint8_t gar = 1; gar < 31; gar++) {
+
+    // Write the register address we want to read
+	
+	//i2c_write_blocking(i2c1, SI5351_ADDR, &reg, 1, true);  // works
+	config_buf[0]=gar;  
+	i2c_write_blocking(i2c0, SI5351_ADDR, config_buf, 1, true);  // fails
+	
+	//i2c_write_blocking(i2c1, SI5351_ADDR, &reg, 1, true);  // fails
+
+
+    // Read 1 byte from the register
+    i2c_read_blocking(i2c0, SI5351_ADDR, i2c_buf, 1, false);
+	printf("register %d:  %d\n",	config_buf[0],i2c_buf[0]);
+  //i2c_read_blocking(i2c1, SI5351_ADDR, &chip_id, 1, false);
+}
+
+
+	
+		//this was used for testing HMC5883L compass module. keeping it here as a template for future I2C use
+   /* i2c_init(i2c_default, 100 * 1000);
     gpio_set_function(20, GPIO_FUNC_I2C);    //pins 20 and 21 for original Pi PIco  (20 Data, 21 Clk) , Custom PCB will use gpio 0,1 instead
     gpio_set_function(21, GPIO_FUNC_I2C);
     gpio_pull_up(20);
