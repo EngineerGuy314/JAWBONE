@@ -1135,6 +1135,13 @@ void process_chan_num()
 { "name": "DALLAS4",      "unit": "Count",  "lowValue":   0, "highValue": 120,    "stepSize": 1 },
 { "name": "Dallas4_sign",      "unit": "Count",  "lowValue":   0, "highValue": 1,    "stepSize": 1 },
 
+5:
+{ "name": "grid_char7",   "unit": "digit",   "lowValue":   0,    "highValue": 9,    "stepSize": 1   },
+{ "name": "grid_char8",   "unit": "digit",    "lowValue":   0,    "highValue":    9,    "stepSize":  1 },
+{ "name": "grid_char9",   "unit": "alpha",      "lowValue":   0,    "highValue":   23,    "stepSize":  1 },
+{ "name": "grid_char10",  "unit": "alpha",      "lowValue":   0,  "highValue":     23,  "stepSize":  1 },
+{ "name": "since_boot",   "unit": "minutes10",    "lowValue":   0,  "highValue":     100,  "stepSize":  1 },
+{ "name": "since_gps_lock",  "unit": "minutes10",  "lowValue":   0,  "highValue":     100,  "stepSize":  1 },
 
 
 7:
