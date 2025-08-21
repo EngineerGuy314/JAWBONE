@@ -119,20 +119,6 @@ int main()
 	
 	InitPicoPins();			// Sets GPIO pins roles and directions and also ADC for voltage and temperature measurements (NVRAM must be read BEFORE this, otherwise dont know how to map IO)
 
-
-
-
-
-	
-	gpio_init(5);   //only needed for temp running oif kazus board
-	gpio_set_dir(5, GPIO_OUT); 
-	gpio_put(5, 1); 
-	gpio_init(6);   //only needed for temp running oif kazus board
-	gpio_set_dir(6, GPIO_OUT); 
-	gpio_put(6, 1); 
-
-
-
 	I2C_init();
     printf("\nThe JAWBONE version: %s %s\nWSPR beacon init...",__DATE__ ,__TIME__);	//messages are sent to USB serial port, 115200 baud
 	int band_as_int=_band[0]-'A';   
