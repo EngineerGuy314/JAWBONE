@@ -118,7 +118,6 @@ int main()
 	set_sys_clock_khz( Main_System_Clock_Speed* 1000, true);
 	
 	InitPicoPins();			// Sets GPIO pins roles and directions and also ADC for voltage and temperature measurements (NVRAM must be read BEFORE this, otherwise dont know how to map IO)
-
 	I2C_init();
     printf("\nThe JAWBONE version: %s %s\nWSPR beacon init...",__DATE__ ,__TIME__);	//messages are sent to USB serial port, 115200 baud
 	int band_as_int=_band[0]-'A';   
