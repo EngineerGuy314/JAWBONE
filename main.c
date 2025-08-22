@@ -748,14 +748,14 @@ void I2C_init(void)
 	
 	sleep_ms(100);
 	
-	// ALSO CHANGE i2c0 to i2c1 in all code below!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!111
-	/*i2c_init(i2c1, 100 * 1000); 			 //init at 100kHz
-    gpio_set_function(2, GPIO_FUNC_I2C);     //i2c1 on gpio 2 and 3
-    gpio_set_function(3, GPIO_FUNC_I2C);
-    gpio_pull_up(2);
-    gpio_pull_up(3);*/
+	// both use i2c0, just pin numbers change
+	/*i2c_init(i2c0, 100 * 1000); 			 //init at 100kHz
+    gpio_set_function(0, GPIO_FUNC_I2C);     //i2c1 on gpio 2 and 3
+    gpio_set_function(1, GPIO_FUNC_I2C);
+    gpio_pull_up(0);
+    gpio_pull_up(1);*/
 	
-									//for kazu board only!!! use above on JAWBONE!!!!!!!!!!!!
+									//for kazu board only!!! use above on JAWBONE!!!  
 	i2c_init(i2c0, 100 * 1000); 			 //init at 100kHz
     gpio_set_function(12, GPIO_FUNC_I2C);     //i2c1 on gpio 2 and 3
     gpio_set_function(13, GPIO_FUNC_I2C);
@@ -791,18 +791,12 @@ void I2C_init(void)
 for (uint8_t gar = 1; gar < 31; gar++) {
 
     // Write the register address we want to read
-	
-	//i2c_write_blocking(i2c1, SI5351_ADDR, &reg, 1, true);  // works
 	config_buf[0]=gar;  
 	i2c_write_blocking(i2c0, SI5351_ADDR, config_buf, 1, true);  // fails
-	
-	//i2c_write_blocking(i2c1, SI5351_ADDR, &reg, 1, true);  // fails
-
-
     // Read 1 byte from the register
     i2c_read_blocking(i2c0, SI5351_ADDR, i2c_buf, 1, false);
 	printf("register %d:  %d\n",	config_buf[0],i2c_buf[0]);
-  //i2c_read_blocking(i2c1, SI5351_ADDR, &chip_id, 1, false);
+
 }
 
 
