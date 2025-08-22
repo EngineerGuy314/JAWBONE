@@ -13,8 +13,8 @@
 // Serial data from GPS module wired to uart1, GPIO9. 
 
 		/* pin definitions  */
-#define GPS_ENABLE_PIN 16       /* GPS_ENABLE pin, inverse logic */  
-#define VFO_ENABLE_PIN 4       /* 18 on my board!! VFO synthesizer ENABLE pin, inverse logic */  
+#define GPS_ENABLE_PIN 16       /* 11 on JAWBBONE  GPS_ENABLE pin, inverse logic */  
+#define VFO_ENABLE_PIN 4       /* 18 on JAWBONE VFO synthesizer ENABLE pin, inverse logic */  
 #define ONEWIRE_bus_pin_pcb 27 
 
 #define LED_PIN  25 /* 25 for pi pico, 13 for Waveshare rp2040-zero  */
@@ -83,6 +83,7 @@
 #define VALID_DBM_SIZE      28
 #define tempU (tempC*(9.0f/5.0f))+32
 
+#define SI5351_ADDR 0x60  //for the MS5351 
 
 ///////////// INCLUDES //////////////////////
 #pragma once

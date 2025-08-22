@@ -738,11 +738,83 @@ void InitPicoPins(void)
     adc_init();
     adc_set_temp_sensor_enabled(true); 	//Enable the onboard temperature sensor
 
-
-                
-
 }
 
+//****************************************
+void si5351_write(uint8_t reg, const uint8_t *data, size_t len) {
+    uint8_t buf[10];
+    buf[0] = reg;
+    for (size_t i = 0; i < len; i++) buf[i+1] = data[i];
+    i2c_write_blocking(i2c0, SI5351_ADDR, buf, len+1, false);
+}
+// Compute PLL/MS fractional registers
+void si5351_calc_frac(uint32_t f_xtal, uint32_t f_out, uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *ms_div) {
+    // 1. Pick a PLL VCO frequency (600-900 MHz)
+    uint32_t f_vco = f_out * 50;   // simple choice
+    if (f_vco < 600000000) f_vco = 600000000;
+    if (f_vco > 900000000) f_vco = 900000000;
+
+    // 2. MS divider
+    *ms_div = f_vco / f_out;
+
+    // 3. Compute PLL multiplier as fraction
+    double mult = (double)f_vco / f_xtal;
+    *a = (uint32_t)mult;
+    double frac = mult - *a;
+    *c = 1048575; // max allowed
+    *b = (uint32_t)(frac * (*c) + 0.5);
+}
+// Pack fractional registers (P1, P2, P3)
+void si5351_pack_frac(uint32_t a, uint32_t b, uint32_t c, uint8_t *reg) {
+    uint32_t P1 = 128*a + (b*128)/c - 512;
+    uint32_t P2 = 128*b - c*((128*b)/c);
+    uint32_t P3 = c;
+
+    reg[0] = (P3 >> 8) & 0xFF;
+    reg[1] = P3 & 0xFF;
+    reg[2] = (P1 >> 16) & 0x03;
+    reg[3] = (P1 >> 8) & 0xFF;
+    reg[4] = P1 & 0xFF;
+    reg[5] = ((P3 >> 12) & 0xF0) | ((P2 >> 16) & 0x0F);
+    reg[6] = (P2 >> 8) & 0xFF;
+    reg[7] = P2 & 0xFF;
+}
+
+// Example: set CLK0 to any frequency
+void si5351_set_freq(uint32_t f_xtal, uint32_t f_out) {
+    uint32_t a,b,c,ms;
+    uint8_t pll_regs[8];
+
+    si5351_calc_frac(f_xtal,f_out,&a,&b,&c,&ms);
+    si5351_pack_frac(a,b,c,pll_regs);
+
+    // disable outputs first
+    uint8_t d = 0xFF;
+    si5351_write(3,&d,1);
+
+    // write PLLA regs
+    si5351_write(26, pll_regs, 8);
+
+    // configure MS0 divider integer mode
+    uint32_t P1 = 128*ms - 512;
+    uint8_t ms_regs[8] = {0};
+    ms_regs[2] = (P1 >> 16) & 0x03;
+    ms_regs[3] = (P1 >> 8) & 0xFF;
+    ms_regs[4] = P1 & 0xFF;
+    si5351_write(42, ms_regs, 8);
+
+    // reset PLLA
+    d = 0xAC;
+    si5351_write(177,&d,1);
+    sleep_us(100);
+
+    // enable CLK0
+    d = 0x4F;
+    si5351_write(16,&d,1);
+    d = 0xFE;
+    si5351_write(3,&d,1);
+}
+//****************************************
 void I2C_init(void)   
 {
 	
@@ -766,29 +838,40 @@ void I2C_init(void)
   printf("Scanning I2C bus...\n");
 	uint8_t dummy = 0;
 	for (uint8_t addr = 1; addr < 127; addr++) {
-		int ret = i2c_write_blocking(i2c1, addr, &dummy, 1, false);
+		int ret = i2c_write_blocking(i2c0, addr, &dummy, 1, false);
 		if (ret >= 0) {
 			printf("Found device at 0x%02X\n", addr);
 		}
 	}
     printf("Scan complete.\n"); */
 
-
-
 	uint8_t i2c_buf[6];
     uint8_t config_buf[2];
 	uint8_t write_config_buf[2];
-	#define SI5351_ADDR 0x60  //for the MS5351 
 	
     uint8_t reg; 
 
-//try a write
+//try a write 
+/*
 	config_buf[0]=26;  
 	config_buf[1]=3;  
-	i2c_write_blocking(i2c0, SI5351_ADDR, config_buf, 2, false);  
+	i2c_write_blocking(i2c0, SI5351_ADDR, config_buf, 2, false);  */
 
 
-for (uint8_t gar = 1; gar < 31; gar++) {
+
+
+
+
+
+
+si5351_set_freq(26000000, 14152900); // XTAL=26MHz, output=10MHz
+
+
+
+
+
+//read some regs
+for (uint8_t gar = 1; gar < 50; gar++) {
 
     // Write the register address we want to read
 	config_buf[0]=gar;  
@@ -796,7 +879,6 @@ for (uint8_t gar = 1; gar < 31; gar++) {
     // Read 1 byte from the register
     i2c_read_blocking(i2c0, SI5351_ADDR, i2c_buf, 1, false);
 	printf("register %d:  %d\n",	config_buf[0],i2c_buf[0]);
-
 }
 
 
