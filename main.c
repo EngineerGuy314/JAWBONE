@@ -18,7 +18,6 @@
 #include "pico/stdlib.h"
 #include "hardware/watchdog.h"
 #include "hardware/uart.h"
-#include "hardware/i2c.h"
 #include "pico/sleep.h"      
 #include "hardware/rtc.h" 
 #include "onewire/onewire_library.h"    // onewire library functions
@@ -490,17 +489,19 @@ show_values();          /* shows current VALUES  AND list of Valid Commands */
 			
 			case 'F':
 				printf("Fixed Frequency output (antenna tuning mode). Enter frequency (for example 14.097) or 0 for exit.\n\t");
-				char _tuning_freq[7];
+				char _tuning_freq[12];
 				float frequency;
 				while(1)
 				{
-					get_user_input("Frequency to generate (MHz): (flakey! use at your own risk!) ", _tuning_freq, sizeof(_tuning_freq));  //blocking until next input
-					frequency = atof(_tuning_freq);
+					get_user_input("Frequency to generate (MHz):  ", _tuning_freq, sizeof(_tuning_freq));  //blocking until next input
+					frequency = 1000000*atof(_tuning_freq);
 					if (!frequency) {break;}
-					printf("Generating %.3f MHz\n", frequency);
-					pWSPR->_pTX->_u32_dialfreqhz = (uint32_t)(frequency * MHZ);
-					pWSPR->_txSched.force_xmit_for_testing = YES;
-					return;  // returns to main loop
+					printf("Generating %f Hz.   Press any key to stop. \n", frequency);
+					si5351_set_freq(26000000, frequency); // XTAL=26MHz, output=
+					c=getchar();c=getchar();
+					si5351_stop();				
+					printf("STOPPED. press a key to continue\n");
+					break;
 				}
 			case 13:  break;
 			case 10:  break;
@@ -711,8 +712,6 @@ void InitPicoPins(void)
 			
 			gpio_init(GPS_ENABLE_PIN); gpio_set_dir(GPS_ENABLE_PIN, GPIO_OUT); //initialize GPS enable output (INVERSE LOGIC on custom PCB, so just initialize it, leave it at zero state)	
 			gpio_init(VFO_ENABLE_PIN); gpio_set_dir(VFO_ENABLE_PIN, GPIO_OUT); //initialize VFO synth enable output (INVERSE LOGIC on custom PCB)
-			
-
 
 			//CAUTION! this turn them BOTH on, you will want to change this!! wuz
 
@@ -740,85 +739,11 @@ void InitPicoPins(void)
 
 }
 
-//****************************************
-void si5351_write(uint8_t reg, const uint8_t *data, size_t len) {
-    uint8_t buf[10];
-    buf[0] = reg;
-    for (size_t i = 0; i < len; i++) buf[i+1] = data[i];
-    i2c_write_blocking(i2c0, SI5351_ADDR, buf, len+1, false);
-}
-// Compute PLL/MS fractional registers
-void si5351_calc_frac(uint32_t f_xtal, uint32_t f_out, uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *ms_div) {
-    // 1. Pick a PLL VCO frequency (600-900 MHz)
-    uint32_t f_vco = f_out * 50;   // simple choice
-    if (f_vco < 600000000) f_vco = 600000000;
-    if (f_vco > 900000000) f_vco = 900000000;
 
-    // 2. MS divider
-    *ms_div = f_vco / f_out;
-
-    // 3. Compute PLL multiplier as fraction
-    double mult = (double)f_vco / f_xtal;
-    *a = (uint32_t)mult;
-    double frac = mult - *a;
-    *c = 1048575; // max allowed
-    *b = (uint32_t)(frac * (*c) + 0.5);
-}
-// Pack fractional registers (P1, P2, P3)
-void si5351_pack_frac(uint32_t a, uint32_t b, uint32_t c, uint8_t *reg) {
-    uint32_t P1 = 128*a + (b*128)/c - 512;
-    uint32_t P2 = 128*b - c*((128*b)/c);
-    uint32_t P3 = c;
-
-    reg[0] = (P3 >> 8) & 0xFF;
-    reg[1] = P3 & 0xFF;
-    reg[2] = (P1 >> 16) & 0x03;
-    reg[3] = (P1 >> 8) & 0xFF;
-    reg[4] = P1 & 0xFF;
-    reg[5] = ((P3 >> 12) & 0xF0) | ((P2 >> 16) & 0x0F);
-    reg[6] = (P2 >> 8) & 0xFF;
-    reg[7] = P2 & 0xFF;
-}
-
-// Example: set CLK0 to any frequency
-void si5351_set_freq(uint32_t f_xtal, uint32_t f_out) {
-    uint32_t a,b,c,ms;
-    uint8_t pll_regs[8];
-
-    si5351_calc_frac(f_xtal,f_out,&a,&b,&c,&ms);
-    si5351_pack_frac(a,b,c,pll_regs);
-
-    // disable outputs first
-    uint8_t d = 0xFF;
-    si5351_write(3,&d,1);
-
-    // write PLLA regs
-    si5351_write(26, pll_regs, 8);
-
-    // configure MS0 divider integer mode
-    uint32_t P1 = 128*ms - 512;
-    uint8_t ms_regs[8] = {0};
-    ms_regs[2] = (P1 >> 16) & 0x03;
-    ms_regs[3] = (P1 >> 8) & 0xFF;
-    ms_regs[4] = P1 & 0xFF;
-    si5351_write(42, ms_regs, 8);
-
-    // reset PLLA
-    d = 0xAC;
-    si5351_write(177,&d,1);
-    sleep_us(100);
-
-    // enable CLK0
-    d = 0x4F;
-    si5351_write(16,&d,1);
-    d = 0xFE;
-    si5351_write(3,&d,1);
-}
-//****************************************
 void I2C_init(void)   
 {
 	
-	sleep_ms(100);
+	sleep_ms(5);
 	
 	// both use i2c0, just pin numbers change
 	/*i2c_init(i2c0, 100 * 1000); 			 //init at 100kHz
@@ -833,8 +758,12 @@ void I2C_init(void)
     gpio_set_function(13, GPIO_FUNC_I2C);
     gpio_pull_up(12);
     gpio_pull_up(13);
+
+
+	//si5351_set_freq(26000000, 14152900); // XTAL=26MHz, output=10MHz
+
 	
-/*
+/*   //scanning bus example
   printf("Scanning I2C bus...\n");
 	uint8_t dummy = 0;
 	for (uint8_t addr = 1; addr < 127; addr++) {
@@ -845,32 +774,19 @@ void I2C_init(void)
 	}
     printf("Scan complete.\n"); */
 
+//writing a register example
+/*
 	uint8_t i2c_buf[6];
     uint8_t config_buf[2];
 	uint8_t write_config_buf[2];
-	
     uint8_t reg; 
-
-//try a write 
-/*
 	config_buf[0]=26;  
 	config_buf[1]=3;  
-	i2c_write_blocking(i2c0, SI5351_ADDR, config_buf, 2, false);  */
+	i2c_write_blocking(i2c0, SI5351_ADDR, config_buf, 2, false);  
+*/
 
 
-
-
-
-
-
-
-si5351_set_freq(26000000, 14152900); // XTAL=26MHz, output=10MHz
-
-
-
-
-
-//read some regs
+/*   //Reading a bunch of regs example
 for (uint8_t gar = 1; gar < 50; gar++) {
 
     // Write the register address we want to read
@@ -879,9 +795,7 @@ for (uint8_t gar = 1; gar < 50; gar++) {
     // Read 1 byte from the register
     i2c_read_blocking(i2c0, SI5351_ADDR, i2c_buf, 1, false);
 	printf("register %d:  %d\n",	config_buf[0],i2c_buf[0]);
-}
-
-
+} */
 	
 		//this was used for testing HMC5883L compass module. keeping it here as a template for future I2C use
    /* i2c_init(i2c_default, 100 * 1000);

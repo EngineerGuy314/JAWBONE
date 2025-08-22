@@ -116,6 +116,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
+#include "hardware/i2c.h"
 
 		
 ////////////    Data type definition /////////////////////////////
@@ -351,6 +352,14 @@ void telem_add_header(int slot, WSPRbeaconContext *c);
 void telem_convert_Big64_to_GridLocPower(WSPRbeaconContext *c);
 int calc_solar_angle(int hour, int min, int64_t int_lat, int64_t int_lon);
 
+//Si5351 stuff from utilities 
+
+
+void si5351_write(uint8_t reg, const uint8_t *data, size_t len);
+void si5351_calc_frac(uint32_t f_xtal, uint32_t f_out, uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *ms_div);
+void si5351_pack_frac(uint32_t a, uint32_t b, uint32_t c, uint8_t *reg);
+void si5351_set_freq(uint32_t f_xtal, uint32_t f_out);
+void si5351_stop();
 
 // GPS TIME
 
