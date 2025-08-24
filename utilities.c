@@ -1148,14 +1148,12 @@ void si5351aOutputOff(uint8_t clk)
 
 }
 
-
-
-
 // Set CLK0 output ON and to the specified frequency
 // Frequency is in the range 10kHz to 150MHz and given in centiHertz (hundreds of Hertz)
 // Example: si5351aSetFrequency(1000000200);
 // will set output CLK0 to 10.000,002MHz
-//
+// I2C and PLL routines from Hans Summer demo code https://www.qrp-labs.com/images/uarduino/uard_demo.ino
+
 // This example sets up PLL A
 // and MultiSynth 0
 // and produces the output on CLK0

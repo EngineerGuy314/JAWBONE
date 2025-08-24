@@ -71,42 +71,27 @@ int main()
 {
 	
 	StampPrintf("\n");DoLogPrint(); // needed asap to wake up the USB stdio port (because StampPrintf includes stdio_init_all();). why though?
-
-
-							//wuz 20! changed for temporary speedup
-	for (int i=0;i < 2;i++) {printf("*");sleep_ms(100);}			
+	for (int i=0;i < 20;i++) {printf("*");sleep_ms(100);}			
  
 	gpio_init(LED_PIN);	gpio_set_dir(LED_PIN, GPIO_OUT); //initialize LED output
-
-
-								//wuz 20! changed for temporary speedup		
 	for (int i=0;i < 20;i++)     //do some blinky on startup, allows time for power supply to stabilize before GPS unit enabled
 		{gpio_put(LED_PIN, 1); sleep_ms(100);gpio_put(LED_PIN, 0);sleep_ms(100);}
-
-
-
-
 	read_NVRAM();				//reads values of _callsign,  _verbosity etc from NVRAM. MUST READ THESE *BEFORE* InitPicoPins
 	if (check_data_validity()==-1)  //if data was bad, breathe LED for 10 seconds and reboot. or if user presses a key enter setup
 		{
-		printf("\nBAD values in NVRAM detected! will reboot in 10 seconds... press any key to enter user-setup menu..\n");
-		fader=0;fade_counter=0;
-				while (getchar_timeout_us(0)==PICO_ERROR_TIMEOUT) //looks for input on USB serial port only @#$%^&!! they changed this function in SDK 2.0!. used to use -1 for no input, now its -2 PICO_ERROR_TIMEOUT
-				{
-				 fader+=1;
-				 if ((fader%5000)>(fader/100))
-				 gpio_put(LED_PIN, 1); 
-					else
-				 gpio_put(LED_PIN, 0);	
-				 if (fader>500000) 
-					{
-						fader=0;
-						fade_counter+=1;
-						if (fade_counter>10) {watchdog_enable(100, 1);for(;;)	{} } //after ~10 secs force a reboot
-					}
-				}	
-			RfGen._pGPStime->user_setup_menu_active=1;	//if we get here, they pressed a button
-			user_interface();  
+			printf("\nBAD values in NVRAM detected! will reboot in 10 seconds... press any key to enter user-setup menu..\n");
+			fader=0;fade_counter=0;
+					while (getchar_timeout_us(0)==PICO_ERROR_TIMEOUT) //looks for input on USB serial port only @#$%^&!! they changed this function in SDK 2.0!. used to use -1 for no input, now its -2 PICO_ERROR_TIMEOUT
+						{
+							 fader+=1;
+							 if ((fader%5000)>(fader/100))
+								 gpio_put(LED_PIN, 1); 
+									else
+								 gpio_put(LED_PIN, 0);	
+							 if (fader>500000) {fader=0;fade_counter+=1;if (fade_counter>10) {watchdog_enable(100, 1);for(;;)	{} }}  //after ~10 secs force a reboot														
+						}	
+				RfGen._pGPStime->user_setup_menu_active=1;	//if we get here, they pressed a button (to interrupt the "breathing" that indicates bad nvram)
+				user_interface();  
 		}
 	process_chan_num(); //sets minute/lane/id from chan number. usually redundant at this point, but can't hurt
 	
@@ -770,10 +755,6 @@ void I2C_init(void)
     gpio_set_function(13, GPIO_FUNC_I2C);
     gpio_pull_up(12);
     gpio_pull_up(13);
-
-
-	//si5351_set_freq(26000000, 14152900); // XTAL=26MHz, output=10MHz
-
 	
 /*   //scanning bus example
   printf("Scanning I2C bus...\n");
@@ -796,7 +777,6 @@ void I2C_init(void)
 	config_buf[1]=3;  
 	i2c_write_blocking(i2c0, SI5351_ADDR, config_buf, 2, false);  
 */
-
 
 /*   //Reading a bunch of regs example
 for (uint8_t gar = 1; gar < 50; gar++) {
@@ -892,7 +872,7 @@ void dallas_setup() {
 
             number_of_onewire_devs = ow_romsearch (&one_wire_interface, OW_romcodes, maxdevs, OW_SEARCH_ROM);
 
-            printf("Found %d devices\n", number_of_onewire_devs);      
+            printf("Found %d one-wire (dallas) temp sensors\n", number_of_onewire_devs);      
             for (int i = 0; i < number_of_onewire_devs; i += 1) {
                 printf("\t%d: 0x%llx\n", i, OW_romcodes[i]);
             }
@@ -907,19 +887,6 @@ void dallas_setup() {
 		} else	puts ("could not initialise the onewire driver");
      }
 }
-/**
-* @note:
-* Verbosity notes:
-* 0: none
-* 1: temp/volts every second, message if no gps
-* 2: GPS status every second
-* 3:          messages when a xmition started
-* 4: x-tended messages when a xmition started 
-* 5: dump context every 20 secs
-* 6: show PPB every second
-* 7: Display GxRMC and GxGGA messages
-* 8: display ALL serial input from GPS module
-*/
 /////////////////////////////////////////////////////////////////////////////////////////////////
 void datalog_special_functions()   //this called only from user-setup menu
 {
@@ -1148,7 +1115,21 @@ void process_chan_num()
 
 	}
 }
+/**
+* @note:
+* Verbosity notes:
+* 0: none
+* 1: temp/volts every second, message if no gps
+* 2: GPS status every second
+* 3:          messages when a xmition started
+* 4: x-tended messages when a xmition started 
+* 5: dump context every 20 secs
+* 6: show PPB every second
+* 7: Display GxRMC and GxGGA messages
+* 8: display ALL serial input from GPS module
+*/
 
+//DEXT definitions:
 /*
 0:
 { "name": "MinSinceBoot",      "unit": "Count",  "lowValue":   0, "highValue": 1000,    "stepSize": 1 },
