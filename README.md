@@ -9,9 +9,22 @@ I owe great thanks and acknowledgement to Roman Piksaykin (https://github.com/RP
 
 
 
-
+*sometimes* both clocks on same phase? hmm, 
 
 
 random notes:
 try 18Mhz for best Klock speed?
 Optional_Debug bitmapping (MSB to LSB): .,.,.,.,.,.,.raw GPS dump
+
+prelim power notes:
+18Mhz @ 5V (kazu board)
+idel: 10mA
+w/GPS: 34mA
+w/Si5351 no load: 46mA
+w/ 70 Ohm    56ma
+
+125Mhz @ 5V
+idle 27mA
+w/gps 52mA
+w/si no load 64mA
+w/ 70 Ohm    74mA

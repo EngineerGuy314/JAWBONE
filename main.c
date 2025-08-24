@@ -434,7 +434,6 @@ void user_interface(void)                                //called if keystroke f
 int c;
 char str[10];
 
-gpio_put(GPS_ENABLE_PIN, 0);                   //shutoff gps to prevent serial input  (probably not needed anymore)
 sleep_ms(100);
 gpio_put(LED_PIN, 1); //LED on.	
 
@@ -490,16 +489,21 @@ show_values();          /* shows current VALUES  AND list of Valid Commands */
 					frequency = 1000000*atof(_tuning_freq);
 					if (!frequency) {break;}
 					InitPicoPins();			// Sets GPIO pins roles and directions and also ADC for voltage and temperature measurements (NVRAM must be read BEFORE this, otherwise dont know how to map IO)
-					I2C_init();sleep_ms(1);
+					gpio_put(VFO_ENABLE_PIN,0);  //turns on VFO
+					I2C_init();sleep_ms(2);
 					printf("Generating %f Hz.   Press any key to stop. \n", frequency);
-
 					si5351aSetFrequency((uint64_t)(frequency*(uint64_t)100));
-					
 					c=getchar();c=getchar();
 					si5351_stop();				
-					printf("STOPPED. press a key to continue\n");
+					gpio_put(VFO_ENABLE_PIN,1);  //turns off VFO										
 					break;
 				}
+				break;
+
+			case '<': {printf("< was pressed");InitPicoPins();gpio_put(VFO_ENABLE_PIN,0);I2C_init();sleep_ms(2);si5351aSetFrequency(1400000000);} break;
+			case '>': {printf("> was pressed");InitPicoPins();gpio_put(GPS_ENABLE_PIN,0);} break;
+			case '?': {printf("? was pressed");InitPicoPins();gpio_put(VFO_ENABLE_PIN,1);gpio_put(GPS_ENABLE_PIN,1);} break;
+			case 'M': {	InitPicoPins();		gpio_put(GPS_ENABLE_PIN,0);		gpio_put(VFO_ENABLE_PIN,0);I2C_init();sleep_ms(2);si5351aSetFrequency(1400000000);} break;
 			case 13:  break;
 			case 10:  break;
 			default: printf(CLEAR_SCREEN); printf("\nYou pressed: %c - (0x%02x), INVALID choice!! ",c,c);sleep_ms(1000);break;		
@@ -705,13 +709,12 @@ void InitPicoPins(void)
 /*  gpio_init(18); 
 	gpio_set_dir(18, GPIO_OUT); //GPIO 18 used for fan control when testing TCXO stability */
 
-			gpio_for_onewire=ONEWIRE_bus_pin_pcb;
-			
+			gpio_for_onewire=ONEWIRE_bus_pin_pcb;			
 			gpio_init(GPS_ENABLE_PIN); gpio_set_dir(GPS_ENABLE_PIN, GPIO_OUT); //initialize GPS enable output (INVERSE LOGIC on custom PCB, so just initialize it, leave it at zero state)	
 			gpio_init(VFO_ENABLE_PIN); gpio_set_dir(VFO_ENABLE_PIN, GPIO_OUT); //initialize VFO synth enable output (INVERSE LOGIC on custom PCB)
-
-			//CAUTION! this turn them BOTH on, you will want to change this!! wuz
-
+			gpio_put(GPS_ENABLE_PIN,1);
+			gpio_put(VFO_ENABLE_PIN,1);
+			//this turn them BOTH off, must turn on later as needed
 	
 	dallas_setup();  //configures one-wire interface. Enabled pullup on one-wire gpio. must do this here, in case they want to use analog instead, because then pullup needs to be disabled below.
 	for (int i=0;i < 3;i++)   //init ADC(s) as needed for TELEN
@@ -749,7 +752,7 @@ void I2C_init(void)
     gpio_pull_up(0);
     gpio_pull_up(1);*/
 	
-									//for kazu board only!!! use above on JAWBONE!!!  
+									//for kazu board only!!! use above on JAWBONE!!!  wuz
 	i2c_init(i2c0, 100 * 1000); 			 //init at 100kHz
     gpio_set_function(12, GPIO_FUNC_I2C);     //i2c1 on gpio 2 and 3
     gpio_set_function(13, GPIO_FUNC_I2C);
