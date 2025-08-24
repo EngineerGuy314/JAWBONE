@@ -56,72 +56,7 @@ extern int RFOUT_PIN;
 static void sleep_callback(void) {
     printf("RTC woke us up\n");
 }
-/// @brief Initializes a new WSPR beacon context.
-
-WSPRbeaconContext *WSPRbeaconInit(const char *pcallsign, const char *pgridsquare, int txpow_dbm, uint32_t dial_freq_hz, uint32_t shift_freq_hz,
-                                  int gpio,  uint8_t start_minute, uint8_t id13, uint8_t suffix, const char *DEXT_config,RfGenStruct *RfGen)
-{
-    WSPRbeaconContext *p = calloc(1, sizeof(WSPRbeaconContext));
-	rf_pin=gpio; //save the value of the (base) RF pin for enabling/disabling them later
-    strncpy(p->_pu8_callsign, pcallsign, sizeof(p->_pu8_callsign));
-    strncpy(p->_pu8_locator, pgridsquare, sizeof(p->_pu8_locator));
-    p->_u8_txpower = txpow_dbm;
-    p->_pTX = TxChannelInit(682667, 0, RfGen);
-    p->_pTX->_u32_dialfreqhz = dial_freq_hz + shift_freq_hz;  //THIS GETS OVERWRITTEN LATER ANYWAY
-    p->_pTX->_i_tx_gpio = gpio;
- 	srand(3333);
-	at_least_one_slot_has_elapsed=0;OLD_GPS_active_status=0;
-	for (int i=0;i < 10;i++) schedule_band[i]=20;  // by default, broadcast on 20 meter band
-	for (int i=0;i < 10;i++) schedule[i]=-1;
-	tester=0;
-	p->_txSched.minutes_since_boot=0;
-	p->_txSched.minutes_since_GPS_aquisition=99999; minute_OF_GPS_aquisition=0;
-	p->_txSched.seconds_it_took_FIRST_GPS_lock=1800;
-	p->_txSched.max_sats_seen_today=0;
-	/* Following code sets packet types for each timeslot. 1:U4B 1st msg, 2: U4B 2nd msg, 3: WSPR1 or Zachtek 1st, 4:Zachtek 2nd,  5:extended TELEN #1 6:extended TELEN #2  */
-	
-	if (id13==253)   //if U4B protocol disabled ('--' enterred for Id13),  we will ONLY do Type 1 [and Type3 (zachtek)] at the specified minute
-	{
-		
-		if (suffix != 253)
-		{
-			schedule[start_minute]=3;         //we get here if suffix is not '-', meaning that Zachtek (wspr type 3) message is desired  
-			schedule[(start_minute+2)%10]=4;  
-		}
-		else
-		{
-			schedule[start_minute]=3;         //we get here only is both U4B and ZAchtek(suffix) are disabled. this is for standalone (WSPR Type-1) only beacon mode
-		}
-
-	}
-else                                       //if we get here, U4B is enabled
-	{
-		schedule[start_minute]=1;          //do 1st U4b packet at selected minute 
-		schedule[(start_minute+2)%10]=2;   //do second U4B packet 2 minutes later
-			if (_band_hop[0]=='1')         //for secret band Hopping, you will do same channel on 10M as you do on 20M, even though its same channel number, the minutes are conveniently offset
-			{
-				schedule[(start_minute+6)%10]=1;          //do 1st U4b packet at selected minute 
-				schedule[(start_minute+8)%10]=2;   //do second U4B packet 2 minutes later
-				schedule_band[(start_minute+6)%10]=10;   //switch to 10 meter frequencies for these slots
-				schedule_band[(start_minute+8)%10]=10;   //switch to 10 meter frequencies for these slots			
-			}
-		if (DEXT_config[0]!='-') schedule[(start_minute+4)%10]=5;   //enable DEXT slot 2
-		if (DEXT_config[1]!='-') schedule[(start_minute+6)%10]=6;   //enable DEXT slot 3    
-		if (DEXT_config[2]!='-') schedule[(start_minute+8)%10]=7;   //enable DEXT slot 4 
-
-		if (suffix != 253)    // if Suffix enabled, Do zachtek messages 4 mins BEFORE (ie 6 minutes in future) of u4b (because minus (-) after char to decimal conversion is 253)
-			{
-				schedule[(start_minute+6)%10]=3;     //if we get here, both U4B and Zachtek (suffix) enabled. hopefully telen not also enabled!
-				schedule[(start_minute+8)%10]=4;
-			}
-	}
-	at_least_one_GPS_fixed_has_been_obtained=0;
-	transmitter_status=0;
-
- return p;
-}
-//*****************************************************************************************************************************
-
+//****************************************************************************************************************************************************************
 void telem_add_values_to_Big64(int slot, WSPRbeaconContext *c) //for DEXT, cycles through value/range array and for non-zero ranges packs  'em into Big64
 {							
 uint64_t val=0;
@@ -172,10 +107,71 @@ void telem_convert_Big64_to_GridLocPower(WSPRbeaconContext *c)
 }
 
 //******************************************************************************************************************************
+/// @brief Initializes a new WSPR beacon context.
+
+WSPRbeaconContext *WSPRbeaconInit(const char *pcallsign, const char *pgridsquare, int txpow_dbm, uint32_t dial_freq_hz, uint32_t shift_freq_hz,
+                                  int gpio,  uint8_t start_minute, uint8_t id13, uint8_t suffix, const char *DEXT_config,RfGenStruct *RfGen)
+{
+    WSPRbeaconContext *p = calloc(1, sizeof(WSPRbeaconContext));
+    strncpy(p->_pu8_callsign, pcallsign, sizeof(p->_pu8_callsign));
+    strncpy(p->_pu8_locator, pgridsquare, sizeof(p->_pu8_locator));
+    p->_u8_txpower = txpow_dbm;
+    p->_pTX = TxChannelInit(682667, 0, RfGen);  			  //bit_period_us Period of data bits, sets up ISR for bit banging WSPR
+	at_least_one_slot_has_elapsed=0;OLD_GPS_active_status=0;
+	at_least_one_GPS_fixed_has_been_obtained=0;
+	transmitter_status=0;   //hmm, this gets set later, but never returns to zero?
+
+	//wuz gpio_put(GPS_ENABLE_PIN,0);gpio_put(VFO_ENABLE_PIN,1);       // power on GPS, power off VFO
+	gpio_put(GPS_ENABLE_PIN,0);gpio_put(VFO_ENABLE_PIN,0);       // ALL ON wuz
+
+	for (int i=0;i < 10;i++) schedule_band[i]=20;  // by default, broadcast on 20 meter band
+	for (int i=0;i < 10;i++) schedule[i]=-1;
+	p->_txSched.minutes_since_boot=0;
+	p->_txSched.minutes_since_GPS_aquisition=99999; minute_OF_GPS_aquisition=0;
+	p->_txSched.seconds_it_took_FIRST_GPS_lock=1800;
+	p->_txSched.max_sats_seen_today=0;
+
+	/* Following code sets packet types for each timeslot. 1:U4B 1st msg, 2: U4B 2nd msg, 3: WSPR1 or Zachtek 1st, 4:Zachtek 2nd,  5:extended TELEN #1 6:extended TELEN #2  */	
+	if (id13==253)   //if U4B protocol disabled ('--' enterred for Id13),  we will ONLY do Type 1 [and Type3 (zachtek)] at the specified minute
+	{		
+		if (suffix != 253)
+		{
+			schedule[start_minute]=3;         //we get here if suffix is not '-', meaning that Zachtek (wspr type 3) message is desired  
+			schedule[(start_minute+2)%10]=4;  
+		}
+		else
+		{
+			schedule[start_minute]=3;         //we get here only is both U4B and ZAchtek(suffix) are disabled. this is for standalone (WSPR Type-1) only beacon mode
+		}
+	}
+else                                       //if we get here, U4B is enabled
+	{
+		schedule[start_minute]=1;          //do 1st U4b packet at selected minute 
+		schedule[(start_minute+2)%10]=2;   //do second U4B packet 2 minutes later
+			if (_band_hop[0]=='1')         //for secret band Hopping, you will do same channel on 10M as you do on 20M, even though its same channel number, the minutes are conveniently offset
+			{
+				schedule[(start_minute+6)%10]=1;          //do 1st U4b packet at selected minute 
+				schedule[(start_minute+8)%10]=2;   //do second U4B packet 2 minutes later
+				schedule_band[(start_minute+6)%10]=10;   //switch to 10 meter frequencies for these slots
+				schedule_band[(start_minute+8)%10]=10;   //switch to 10 meter frequencies for these slots			
+			}
+		if (DEXT_config[0]!='-') schedule[(start_minute+4)%10]=5;   //enable DEXT slot 2
+		if (DEXT_config[1]!='-') schedule[(start_minute+6)%10]=6;   //enable DEXT slot 3    
+		if (DEXT_config[2]!='-') schedule[(start_minute+8)%10]=7;   //enable DEXT slot 4 
+
+		if (suffix != 253)    // if Suffix enabled, Do zachtek messages 4 mins BEFORE (ie 6 minutes in future) of u4b (because minus (-) after char to decimal conversion is 253)
+			{
+				schedule[(start_minute+6)%10]=3;     //if we get here, both U4B and Zachtek (suffix) enabled. hopefully telen not also enabled!
+				schedule[(start_minute+8)%10]=4;
+			}
+	}
+
+ return p;
+}
+//*****************************************************************************************************************************
+
 /// @brief Arranges WSPR sending in accordance with pre-defined schedule.
-/// @brief It works only if GPS receiver available (for now).
-/// @param pctx Ptr to Context.
-/// @return 0 if OK, -1 if NO GPS received available
+
 int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called every half second from Main.c
 {
               	
@@ -219,14 +215,13 @@ else
 								uint32_t freq_low = pctx->_pTX->_u32_dialfreqhz - 100;
 								uint32_t freq_high = pctx->_pTX->_u32_dialfreqhz + 300;
 								
-								//wuz enable xmit  
-								/*if (pico_fractional_pll_init(pll_sys, RFOUT_PIN, freq_low, freq_high, GPIO_DRIVE_STRENGTH_12MA, GPIO_SLEW_RATE_FAST) != 0) {
-									printf("pico_fractional_pll_init failed!! Halted.");
-									for (;;) { }
-								}
-								pico_fractional_pll_enable_output(true);*/
+//wuz								gpio_put(GPS_ENABLE_PIN,1);	sleep_ms(2);  //gps off
+		//wuz						gpio_put(VFO_ENABLE_PIN,0);sleep_ms(3);   //xmit on
+		gpio_put(GPS_ENABLE_PIN,0);gpio_put(VFO_ENABLE_PIN,0);       // ALL ON wuz
 
-							WSPRbeaconSendPacket(pctx);
+	
+	
+								WSPRbeaconSendPacket(pctx);
 								start_time = get_absolute_time();       
 								forced_xmit_in_process=1;
 							}
@@ -234,9 +229,9 @@ else
 								{
 									forced_xmit_in_process=0; //restart after 2 mins
 
-									//wuz stop XMIT
-									/*pico_fractional_pll_enable_output(false);
-									pico_fractional_pll_deinit();*/
+									gpio_put(GPS_ENABLE_PIN,1);	sleep_ms(2);  //gps off
+									gpio_put(VFO_ENABLE_PIN,1);sleep_ms(3);   //xmit oFf
+	
 									printf("Pio *STOP*  called by end of forced xmit. small pause before restart\n");
 									sleep_ms(2000);
 								}								
@@ -280,12 +275,10 @@ else
 			uint32_t freq_low = pctx->_pTX->_u32_dialfreqhz - 100;
 			uint32_t freq_high = pctx->_pTX->_u32_dialfreqhz + 300;
 
-			//wuz start XMIT
-			/*if (pico_fractional_pll_init(pll_sys, RFOUT_PIN, freq_low, freq_high, GPIO_DRIVE_STRENGTH_12MA, GPIO_SLEW_RATE_FAST) != 0) {
-				printf("pico_fractional_pll_init failed!! Halted.");
-				for (;;) { }
-				}
-			pico_fractional_pll_enable_output(true);*/
+//wuz			gpio_put(GPS_ENABLE_PIN,1);	sleep_ms(2);  //gps off
+	//wuz		gpio_put(VFO_ENABLE_PIN,0);sleep_ms(3);   //xmit on
+				gpio_put(GPS_ENABLE_PIN,0);gpio_put(VFO_ENABLE_PIN,0);       // ALL ON wuz
+
 			
 			transmitter_status=1;
 			WSPRbeaconCreatePacket(pctx, schedule[current_minute] ); //the schedule determines packet type (1-4 for U4B 1st msg,U4B 2nd msg,Zachtek 1st, Zachtek 2nd)

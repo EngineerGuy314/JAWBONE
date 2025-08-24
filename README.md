@@ -14,10 +14,10 @@ I owe great thanks and acknowledgement to Roman Piksaykin (https://github.com/RP
 
 random notes:
 try 18Mhz for best Klock speed?
-Optional_Debug bitmapping (MSB to LSB): .,.,.,.,.,.,.raw GPS dump
+Optional_Debug bitmapping (MSB to LSB): .,.,.,.,.,IO Status,raw GPS dump
 
-prelim power notes:
-18Mhz @ 5V (kazu board)
+prelim power notes: (kevins board)
+18Mhz @ 5V 
 idel: 10mA
 w/GPS: 34mA
 w/Si5351 no load: 46mA

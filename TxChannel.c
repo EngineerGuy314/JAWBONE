@@ -15,14 +15,9 @@ static void RAM (TxChannelISR)(void)
     const int n2send = TxChannelPop(spTX, &byte);
     if(n2send)
     {
-        //wuz set output frequency here (ignore "compensation"
-			//RgGen may have the data you need? or just sptx, either way
+
+			si5351aSetFrequency((uint64_t)((uint64_t)(((float)spTX->_u32_dialfreqhz + (float)byte * 12000.f / 8192.f)*100)));
 			
-		/*const int32_t i32_compensation_millis =  PioDCOGetFreqShiftMilliHertz(spTX->_p_oscillator, 
-	    (uint64_t)(spTX->_u32_dialfreqhz * 1000LL));
-            //compensate freqency shift using last symbol frequency
-			pico_fractional_pll_set_freq_f((float)spTX->_u32_dialfreqhz + (float)byte * 12000.f / 8192.f - (float)i32_compensation_millis / 1000.f);
-            //set the current symbol frequency*/
     }
 
     spTX->_tm_future_call += spTX->_bit_period_us; //next alarm calculation
