@@ -1208,27 +1208,30 @@ void si5351aSetFrequency(uint64_t frequency) //Frequency is in centiHz
 
   // Set up PLL A with the calculated  multiplication ratio
   setupPLL(MultiSynth_frac_denom_reg_26, mult, num, denom);
-
+															//clk0 and clk1 both use PLLA
   // Set up MultiSynth Divider 0, with the calculated Divider.
   // The final R division stage can divide by a power of two, from 1..128.
   // reprented by constants SI_R_DIV1 to SI_R_DIV128 (see si5351a.h header file)
   // If you want to output frequencies below 1MHz, you have to use the
   // final R division stage
   setupMultisynth(MS_Div_0_42, Divider, rDiv);
+  setupMultisynth(50         , Divider, rDiv);   //reg 50 is same for clk1
 
   // Reset the PLL. This causes a glitch in the output. For small changes to
   // the parameters, you don't need to reset the PLL, and there is no glitch
   FreqChange = frequency - oldFreq;
 
-  if ( abs(FreqChange) > 100000) //If changed more than 1kHz then reset PLL (completely arbitrary choosen)
-  {
+ //if ( abs(FreqChange) > 100000) //If changed more than 1kHz then reset PLL (completely arbitrary choosen)
+  //{
     i2cSendRegister(PLL_RESET_177, 0xA0);
-  }
+  //}
 
   // Finally switch on the CLK0 output (0x4F)
   // and set the MultiSynth0 input to be PLL A
-	i2cSendRegister(CLK_CNTRL_reg_16, 0x4F | SI_CLK_SRC_PLL_A);
-	i2cSendRegister(3, 0xFE ); //reg 3 enable output 0
+	i2cSendRegister(CLK_CNTRL_reg_16, 0x4F );   //x4F=full 8mA drive
+	i2cSendRegister(17, 0x5F );  				//x5F=INVERTED clk1, full 8mA drive
+
+	i2cSendRegister(3, 0xFC ); //reg 3 enable output 0 + 1
 	oldFreq = frequency;
 
 }
