@@ -1066,88 +1066,198 @@ double mh2lat(char* locator) {
     return field + square + subsquare + extsquare + precsquare - 90;
 }
 
-//*********** si5351 stuff *****************************
-void si5351_write(uint8_t reg, const uint8_t *data, size_t len) {
-    uint8_t buf[10];
-    buf[0] = reg;
-    for (size_t i = 0; i < len; i++) buf[i+1] = data[i];
-    i2c_write_blocking(i2c0, SI5351_ADDR, buf, len+1, false);
+
+//************************si5351 stuff****************
+uint8_t i2cSendRegister(uint8_t reg, uint8_t data)
+{
+	uint8_t buf[2];
+	buf[0]=reg;
+	buf[1]=data;
+	i2c_write_blocking(i2c0, SI5351_ADDR, buf, 2, false);
+//	 printf("%d,%X \n",reg,data);
 }
-// Compute PLL/MS fractional registers
-void si5351_calc_frac(uint32_t f_xtal, uint32_t f_out, uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *ms_div) {
-    // 1. Pick a PLL VCO frequency (600-900 MHz)
-    uint32_t f_vco = f_out * 50;   // simple choice
-    if (f_vco < 600000000) f_vco = 600000000;
-    if (f_vco > 900000000) f_vco = 900000000;
-
-    // 2. MS divider
-    *ms_div = f_vco / f_out;
-
-    // 3. Compute PLL multiplier as fraction
-    double mult = (double)f_vco / f_xtal;
-    *a = (uint32_t)mult;
-    double frac = mult - *a;
-    *c = 1048575; // max allowed
-    *b = (uint32_t)(frac * (*c) + 0.5);
-}
-// Pack fractional registers (P1, P2, P3)
-void si5351_pack_frac(uint32_t a, uint32_t b, uint32_t c, uint8_t *reg) {
-    uint32_t P1 = 128*a + (b*128)/c - 512;
-    uint32_t P2 = 128*b - c*((128*b)/c);
-    uint32_t P3 = c;
-
-    reg[0] = (P3 >> 8) & 0xFF;
-    reg[1] = P3 & 0xFF;
-    reg[2] = (P1 >> 16) & 0x03;
-    reg[3] = (P1 >> 8) & 0xFF;
-    reg[4] = P1 & 0xFF;
-    reg[5] = ((P3 >> 12) & 0xF0) | ((P2 >> 16) & 0x0F);
-    reg[6] = (P2 >> 8) & 0xFF;
-    reg[7] = P2 & 0xFF;
-}
-
-// Example: set CLK0 to any frequency
-void si5351_set_freq(uint32_t f_xtal, uint32_t f_out) {
-    uint32_t a,b,c,ms;
-    uint8_t pll_regs[8];
-
-    si5351_calc_frac(f_xtal,f_out,&a,&b,&c,&ms);
-    si5351_pack_frac(a,b,c,pll_regs);
-
-    // disable outputs first
-    uint8_t d = 0xFF;
-    si5351_write(3,&d,1);
-
-    // write PLLA regs
-    si5351_write(26, pll_regs, 8);
-
-    // configure MS0 divider integer mode
-    uint32_t P1 = 128*ms - 512;
-    uint8_t ms_regs[8] = {0};
-    ms_regs[2] = (P1 >> 16) & 0x03;
-    ms_regs[3] = (P1 >> 8) & 0xFF;
-    ms_regs[4] = P1 & 0xFF;
-    si5351_write(42, ms_regs, 8);
-
-    // reset PLLA
-    d = 0xAC;
-    si5351_write(177,&d,1);
-    sleep_us(100);
-
-    // enable CLK0
-    d = 0x4F;
-    si5351_write(16,&d,1);
-    d = 0xFE;
-    si5351_write(3,&d,1);
-}
-
-
 void si5351_stop()
 {
-  // disable outputs 
-    uint8_t d = 0xFF;
-    si5351_write(3,&d,1);
+		i2cSendRegister(3, 0xFF ); //reg 3 disable all outputs
+ 
+}
+///////
+// I2C and PLL routines from Hans Summer demo code https://www.qrp-labs.com/images/uarduino/uard_demo.ino
+//
+// Set up specified PLL with mult, num and denom
+// mult is 15..90
+// num is 0..1,048,575 (0xFFFFF)
+// denom is 0..1,048,575 (0xFFFFF)
+//
+void setupPLL(uint8_t pll, uint8_t mult, uint32_t num, uint32_t denom)
+{
+  uint32_t P1; // PLL config register P1
+  uint32_t P2; // PLL config register P2
+  uint32_t P3; // PLL config register P3
+
+  P1 = (uint32_t)(128 * ((float)num / (float)denom));
+  P1 = (uint32_t)(128 * (uint32_t)(mult) + P1 - 512);
+  P2 = (uint32_t)(128 * ((float)num / (float)denom));
+  P2 = (uint32_t)(128 * num - denom * P2);
+  P3 = denom;
+
+  i2cSendRegister(pll + 0, (P3 & 0x0000FF00) >> 8);
+  i2cSendRegister(pll + 1, (P3 & 0x000000FF));
+  i2cSendRegister(pll + 2, (P1 & 0x00030000) >> 16);
+  i2cSendRegister(pll + 3, (P1 & 0x0000FF00) >> 8);
+  i2cSendRegister(pll + 4, (P1 & 0x000000FF));
+  i2cSendRegister(pll + 5, ((P3 & 0x000F0000) >> 12) | ((P2 &
+                  0x000F0000) >> 16));
+  i2cSendRegister(pll + 6, (P2 & 0x0000FF00) >> 8);
+  i2cSendRegister(pll + 7, (P2 & 0x000000FF));
+}
+
+// I2C and PLL routines from Han Summer demo code https://www.qrp-labs.com/images/uarduino/uard_demo.ino
+//
+// Set up MultiSynth with integer Divider and R Divider
+// R Divider is the bit value which is OR'ed onto the appropriate
+// register, it is a #define in si5351a.h
+//
+void setupMultisynth(uint8_t synth, uint32_t Divider, uint8_t rDiv)
+{
+  uint32_t P1; // Synth config register P1
+  uint32_t P2; // Synth config register P2
+  uint32_t P3; // Synth config register P3
+
+  P1 = 128 * Divider - 512;
+  P2 = 0; // P2 = 0, P3 = 1 forces an integer value for the Divider
+  P3 = 1;
+
+  i2cSendRegister(synth + 0, (P3 & 0x0000FF00) >> 8);
+  i2cSendRegister(synth + 1, (P3 & 0x000000FF));
+  i2cSendRegister(synth + 2, ((P1 & 0x00030000) >> 16) | rDiv);
+  i2cSendRegister(synth + 3, (P1 & 0x0000FF00) >> 8);
+  i2cSendRegister(synth + 4, (P1 & 0x000000FF));
+  i2cSendRegister(synth + 5, ((P3 & 0x000F0000) >> 12) | ((P2 &
+                  0x000F0000) >> 16));
+  i2cSendRegister(synth + 6, (P2 & 0x0000FF00) >> 8);
+  i2cSendRegister(synth + 7, (P2 & 0x000000FF));
+}
+
+
+// Switches off Si5351a output
+void si5351aOutputOff(uint8_t clk)
+{
+  i2cSendRegister(clk, 0x80); // Refer to SiLabs AN619 to see
+  //bit values - 0x80 turns off the output stage
 
 }
 
-//****************************************
+
+
+
+// Set CLK0 output ON and to the specified frequency
+// Frequency is in the range 10kHz to 150MHz and given in centiHertz (hundreds of Hertz)
+// Example: si5351aSetFrequency(1000000200);
+// will set output CLK0 to 10.000,002MHz
+//
+// This example sets up PLL A
+// and MultiSynth 0
+// and produces the output on CLK0
+//
+void si5351aSetFrequency(uint64_t frequency) //Frequency is in centiHz
+{
+  static uint64_t oldFreq;
+  int32_t FreqChange;
+  uint64_t pllFreq;
+  //uint32_t xtalFreq = XTAL_FREQ;
+  uint32_t l;
+  float f;
+  uint8_t mult;
+  uint32_t num;
+  uint32_t denom;
+  uint32_t Divider;
+  uint8_t rDiv;
+
+
+  if (frequency > 100000000ULL) { //If higher than 1MHz then set R output divider to 1
+    rDiv = SI_R_DIV_1;
+    Divider = 90000000000ULL / frequency;// Calculate the division ratio. 900MHz is the maximum VCO freq (expressed as deciHz)
+    pllFreq = Divider * frequency; // Calculate the pllFrequency:
+    mult = pllFreq / (synth_xtal_freq * 100UL); // Determine the multiplier to
+    l = pllFreq % (synth_xtal_freq * 100UL); // It has three parts:
+    f = l; // mult is an integer that must be in the range 15..90
+    f *= 1048575; // num and denom are the fractional parts, the numerator and denominator
+    f /= synth_xtal_freq; // each is 20 bits (range 0..1048575)
+    num = f; // the actual multiplier is mult + num / denom
+    denom = 1048575; // For simplicity we set the denominator to the maximum 1048575
+    num = num / 100;
+  }
+  else // lower freq than 1MHz - use output Divider set to 128
+  {
+    rDiv = SI_R_DIV_128;
+    //frequency = frequency * 128ULL; //Set base freq 128 times higher as we are dividing with 128 in the last output stage
+    Divider = 90000000000ULL / (frequency * 128ULL);// Calculate the division ratio. 900MHz is the maximum VCO freq
+
+    pllFreq = Divider * frequency * 128ULL; // Calculate the pllFrequency:
+    //the Divider * desired output frequency
+    mult = pllFreq / (synth_xtal_freq * 100UL); // Determine the multiplier to
+    //get to the required pllFrequency
+    l = pllFreq % (synth_xtal_freq * 100UL); // It has three parts:
+    f = l; // mult is an integer that must be in the range 15..90
+    f *= 1048575; // num and denom are the fractional parts, the numerator and denominator
+    f /= synth_xtal_freq; // each is 20 bits (range 0..1048575)
+    num = f; // the actual multiplier is mult + num / denom
+    denom = 1048575; // For simplicity we set the denominator to the maximum 1048575
+    num = num / 100;
+  }
+
+
+  // Set up PLL A with the calculated  multiplication ratio
+  setupPLL(MultiSynth_frac_denom_reg_26, mult, num, denom);
+
+  // Set up MultiSynth Divider 0, with the calculated Divider.
+  // The final R division stage can divide by a power of two, from 1..128.
+  // reprented by constants SI_R_DIV1 to SI_R_DIV128 (see si5351a.h header file)
+  // If you want to output frequencies below 1MHz, you have to use the
+  // final R division stage
+  setupMultisynth(MS_Div_0_42, Divider, rDiv);
+
+  // Reset the PLL. This causes a glitch in the output. For small changes to
+  // the parameters, you don't need to reset the PLL, and there is no glitch
+  FreqChange = frequency - oldFreq;
+
+  if ( abs(FreqChange) > 100000) //If changed more than 1kHz then reset PLL (completely arbitrary choosen)
+  {
+    i2cSendRegister(PLL_RESET_177, 0xA0);
+  }
+
+  // Finally switch on the CLK0 output (0x4F)
+  // and set the MultiSynth0 input to be PLL A
+	i2cSendRegister(CLK_CNTRL_reg_16, 0x4F | SI_CLK_SRC_PLL_A);
+	i2cSendRegister(3, 0xFE ); //reg 3 enable output 0
+	oldFreq = frequency;
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

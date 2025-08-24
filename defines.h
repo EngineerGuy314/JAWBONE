@@ -84,6 +84,18 @@
 #define tempU (tempC*(9.0f/5.0f))+32
 
 #define SI5351_ADDR 0x60  //for the MS5351 
+#define CLK_CNTRL_reg_16 16 // Register definitions
+#define MultiSynth_frac_denom_reg_26 26
+#define MS_Div_0_42 42
+#define MS_Div_1_50 50
+#define MS_Div_2_58 58
+#define PLL_RESET_177 177
+#define SI_R_DIV_1 0b00000000 // R-division ratio definitions
+#define SI_R_DIV_128 0b01110000
+#define SI_CLK_SRC_PLL_A 0b00000000
+#define Si5351I2CAddress 0x60
+#define synth_xtal_freq 26000000
+
 
 ///////////// INCLUDES //////////////////////
 #pragma once
@@ -307,18 +319,12 @@ void wspr_merge_sync_vector(uint8_t * g, uint8_t * symbols);
 uint8_t wspr_code(char c);
 void pad_callsign(char * call);
 
-//pico fractional from kazu  MARKED FOR DELETION
-/*int pico_fractional_pll_init(PLL pll, uint gpio, uint32_t freq_range_min, uint32_t freq_range_max, enum gpio_drive_strength drive_strength, enum gpio_slew_rate slew_rate);
-
-int pico_fractional_pll_deinit(void);
-void pico_fractional_pll_enable_output(bool enable);
-void pico_fractional_pll_set_drive_strength(enum gpio_drive_strength drive_strength);
-void pico_fractional_pll_set_slew_rate(enum gpio_slew_rate slew_rate);
-void pico_fractional_pll_set_freq_u32(uint32_t freq);
-// fixed point: 28bit integer + 4bit fraction
-void pico_fractional_pll_set_freq_28p4(uint32_t freq_28p4);
-void pico_fractional_pll_set_freq_d(double freq);
-void pico_fractional_pll_set_freq_f(float freq);*/
+//si5315 from Hans' sample
+uint8_t i2cSendRegister(uint8_t reg, uint8_t data);
+void si5351aSetFrequency(uint64_t frequency); //Frequency is in centiHz
+void si5351aOutputOff(uint8_t clk);
+void setupMultisynth(uint8_t synth, uint32_t Divider, uint8_t rDiv);
+void setupPLL(uint8_t pll, uint8_t mult, uint32_t num, uint32_t denom);
 
 
 //TX CHannel
@@ -354,11 +360,6 @@ int calc_solar_angle(int hour, int min, int64_t int_lat, int64_t int_lon);
 
 //Si5351 stuff from utilities 
 
-
-void si5351_write(uint8_t reg, const uint8_t *data, size_t len);
-void si5351_calc_frac(uint32_t f_xtal, uint32_t f_out, uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *ms_div);
-void si5351_pack_frac(uint32_t a, uint32_t b, uint32_t c, uint8_t *reg);
-void si5351_set_freq(uint32_t f_xtal, uint32_t f_out);
 void si5351_stop();
 
 // GPS TIME

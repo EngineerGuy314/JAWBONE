@@ -71,12 +71,20 @@ int main()
 {
 	
 	StampPrintf("\n");DoLogPrint(); // needed asap to wake up the USB stdio port (because StampPrintf includes stdio_init_all();). why though?
-	for (int i=0;i < 20;i++) {printf("*");sleep_ms(100);}			
+
+
+							//wuz 20! changed for temporary speedup
+	for (int i=0;i < 2;i++) {printf("*");sleep_ms(100);}			
  
 	gpio_init(LED_PIN);	gpio_set_dir(LED_PIN, GPIO_OUT); //initialize LED output
-		
+
+
+								//wuz 20! changed for temporary speedup		
 	for (int i=0;i < 20;i++)     //do some blinky on startup, allows time for power supply to stabilize before GPS unit enabled
 		{gpio_put(LED_PIN, 1); sleep_ms(100);gpio_put(LED_PIN, 0);sleep_ms(100);}
+
+
+
 
 	read_NVRAM();				//reads values of _callsign,  _verbosity etc from NVRAM. MUST READ THESE *BEFORE* InitPicoPins
 	if (check_data_validity()==-1)  //if data was bad, breathe LED for 10 seconds and reboot. or if user presses a key enter setup
@@ -496,8 +504,12 @@ show_values();          /* shows current VALUES  AND list of Valid Commands */
 					get_user_input("Frequency to generate (MHz):  ", _tuning_freq, sizeof(_tuning_freq));  //blocking until next input
 					frequency = 1000000*atof(_tuning_freq);
 					if (!frequency) {break;}
+					InitPicoPins();			// Sets GPIO pins roles and directions and also ADC for voltage and temperature measurements (NVRAM must be read BEFORE this, otherwise dont know how to map IO)
+					I2C_init();sleep_ms(1);
 					printf("Generating %f Hz.   Press any key to stop. \n", frequency);
-					si5351_set_freq(26000000, frequency); // XTAL=26MHz, output=
+
+					si5351aSetFrequency((uint64_t)(frequency*(uint64_t)100));
+					
 					c=getchar();c=getchar();
 					si5351_stop();				
 					printf("STOPPED. press a key to continue\n");
