@@ -15,9 +15,8 @@ static void RAM (TxChannelISR)(void)
     const int n2send = TxChannelPop(spTX, &byte);
     if(n2send)
     {
-
-			si5351aSetFrequency((uint64_t)((uint64_t)(((float)spTX->_u32_dialfreqhz + (float)byte * 12000.f / 8192.f)*100)));
-			
+			// sets frequency after doing modulation with the value in "byte"
+			si5351aSetFrequency((uint64_t)((uint64_t)(((float)spTX->_u32_dialfreqhz + (float)byte * 12000.f / 8192.f)*100)));			
     }
 
     spTX->_tm_future_call += spTX->_bit_period_us; //next alarm calculation
