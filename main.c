@@ -141,7 +141,6 @@ int main()
 	pWB->_txSched.low_power_mode=(uint8_t)_battery_mode[0]-'0';
 	strcpy(pWB->_txSched.id13,_id13);
 	RfGen._pGPStime->user_setup_menu_active=0;
-	RfGen._pGPStime->forced_XMIT_on=force_transmit;
 	RfGen._pGPStime->verbosity=(uint8_t)_verbosity[0]-'0';   
     int tick = 0;int tick2 = 0;  //used for timing various messages
 	LED_sequence_start_time = get_absolute_time();
@@ -433,7 +432,7 @@ void user_interface(void)                                //called if keystroke f
 {
 int c;
 char str[10];
-
+gpio_put(GPS_ENABLE_PIN,1);gpio_put(VFO_ENABLE_PIN,1);
 sleep_ms(100);
 gpio_put(LED_PIN, 1); //LED on.	
 

@@ -21,6 +21,7 @@ static char grid9;
 static char grid10;
 static float altitude_snapshot;
 static int rf_pin;
+static int minute_of_following_packet;
 static int U4B_second_packet_has_started = 0;
 static int U4B_second_packet_has_started_at_minute;
 static int itx_trigger = 0;
@@ -30,6 +31,7 @@ static int transmitter_status = 0;
 static absolute_time_t start_time;
 static absolute_time_t time_of_last_serial_packet;
 static int current_minute;
+static int current_second;
 static int oneshots[10];
 static int schedule[10];  //array index is minute, (odd minutes are unused) value is -1 for NONE or 1-4 for U4B 1st msg,U4B 2nd msg,Zachtek 1st, Zachtek 2nd, and #5 for extended TELEN
 static int schedule_band[10];  //holds the band number (10, 20, 17, etc...) that will be used for that timeslot
@@ -42,7 +44,9 @@ static uint32_t previous_msg_count;
 static absolute_time_t GPS_aquisiion_time;
 static absolute_time_t GPS_loss_time;
 static uint32_t minute_OF_GPS_aquisition;
+static int SEQ;
 static int tikk;
+static char _4_char_version_of_locator[5];
 static int tester;
 static uint32_t OLD_GPS_active_status;
 const int8_t valid_dbm[19] =
@@ -118,13 +122,11 @@ WSPRbeaconContext *WSPRbeaconInit(const char *pcallsign, const char *pgridsquare
     p->_u8_txpower = txpow_dbm;
     p->_pTX = TxChannelInit(682667, 0, RfGen);  			  //bit_period_us Period of data bits, sets up ISR for bit banging WSPR
 	at_least_one_slot_has_elapsed=0;OLD_GPS_active_status=0;
-	at_least_one_GPS_fixed_has_been_obtained=0;
 	transmitter_status=0;   //hmm, this gets set later, but never returns to zero?
 
-	//wuz gpio_put(GPS_ENABLE_PIN,0);gpio_put(VFO_ENABLE_PIN,1);       // power on GPS, power off VFO
-	gpio_put(GPS_ENABLE_PIN,0);gpio_put(VFO_ENABLE_PIN,0);       // ALL ON wuz
+	gpio_put(VFO_ENABLE_PIN,1); sleep_ms(1);gpio_put(GPS_ENABLE_PIN,0);      // power on GPS, power off VFO
 
-	for (int i=0;i < 10;i++) schedule_band[i]=20;  // by default, broadcast on 20 meter band
+
 	for (int i=0;i < 10;i++) schedule[i]=-1;
 	p->_txSched.minutes_since_boot=0;
 	p->_txSched.minutes_since_GPS_aquisition=99999; minute_OF_GPS_aquisition=0;
@@ -148,13 +150,6 @@ else                                       //if we get here, U4B is enabled
 	{
 		schedule[start_minute]=1;          //do 1st U4b packet at selected minute 
 		schedule[(start_minute+2)%10]=2;   //do second U4B packet 2 minutes later
-			if (_band_hop[0]=='1')         //for secret band Hopping, you will do same channel on 10M as you do on 20M, even though its same channel number, the minutes are conveniently offset
-			{
-				schedule[(start_minute+6)%10]=1;          //do 1st U4b packet at selected minute 
-				schedule[(start_minute+8)%10]=2;   //do second U4B packet 2 minutes later
-				schedule_band[(start_minute+6)%10]=10;   //switch to 10 meter frequencies for these slots
-				schedule_band[(start_minute+8)%10]=10;   //switch to 10 meter frequencies for these slots			
-			}
 		if (DEXT_config[0]!='-') schedule[(start_minute+4)%10]=5;   //enable DEXT slot 2
 		if (DEXT_config[1]!='-') schedule[(start_minute+6)%10]=6;   //enable DEXT slot 3    
 		if (DEXT_config[2]!='-') schedule[(start_minute+8)%10]=7;   //enable DEXT slot 4 
@@ -165,7 +160,8 @@ else                                       //if we get here, U4B is enabled
 				schedule[(start_minute+8)%10]=4;
 			}
 	}
-
+		SEQ=10; //initialize WSPR schedule state machine
+		p->_txSched.led_mode = 0;  //waiting for GPS
  return p;
 }
 //*****************************************************************************************************************************
@@ -175,11 +171,12 @@ else                                       //if we get here, U4B is enabled
 int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called every half second from Main.c
 {
               	
-	uint32_t is_GPS_available = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u32_nmea_gprmc_count;  //on if there ever were any serial data received from a GPS unit
     const uint32_t is_GPS_active = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_is_solution_active;  //on if valid 3d fix
-	pctx->_txSched.minutes_since_boot=floor((to_ms_since_boot(get_absolute_time()) / (uint32_t)60000) );
+	pctx->_txSched.minutes_since_boot=floor((to_ms_since_boot(get_absolute_time()) / (uint32_t)60000) );     //used for DEXT
 	
-	//printf("secs since aquistion %d secs since loss %d \n",pctx->_txSched.seconds_since_GPS_aquisition,pctx->_txSched.seconds_since_GPS_loss);
+	
+/*  wuz gps ackk and loss times for DEXT need re-doing
+	
 	if (OLD_GPS_active_status!=is_GPS_active) //GPS status has changed
 	{
 		OLD_GPS_active_status=is_GPS_active; //make it a oneshot
@@ -190,7 +187,6 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 		else
 			GPS_loss_time=get_absolute_time(); 
 	}
-
 if (is_GPS_active)
 {
 	pctx->_txSched.minutes_since_GPS_aquisition = pctx->_txSched.minutes_since_boot-minute_OF_GPS_aquisition; //current time minus time it last went on is MINUTES since on
@@ -205,97 +201,129 @@ else
 	pctx->_txSched.seconds_since_GPS_loss=floor(absolute_time_diff_us(GPS_loss_time, get_absolute_time()) / (int64_t)1000000);
 
 }
+*/
 
-		 if(is_GPS_active) at_least_one_GPS_fixed_has_been_obtained=1;
-		 if (pctx->_txSched.force_xmit_for_testing) {            
-							if(forced_xmit_in_process==0)
-							{
-								StampPrintf("> FORCING XMISSION! for debugging   <"); pctx->_txSched.led_mode = 4; 
-							
-								uint32_t freq_low = pctx->_pTX->_u32_dialfreqhz - 100;
-								uint32_t freq_high = pctx->_pTX->_u32_dialfreqhz + 300;
-								
-//wuz								gpio_put(GPS_ENABLE_PIN,1);	sleep_ms(2);  //gps off
-		//wuz						gpio_put(VFO_ENABLE_PIN,0);sleep_ms(3);   //xmit on
-		gpio_put(GPS_ENABLE_PIN,0);gpio_put(VFO_ENABLE_PIN,0);       // ALL ON wuz
-
-	
-	
-								WSPRbeaconSendPacket(pctx);
-								start_time = get_absolute_time();       
-								forced_xmit_in_process=1;
-							}
-								else if(absolute_time_diff_us( start_time, get_absolute_time()) > 120000000ULL) 
-								{
-									forced_xmit_in_process=0; //restart after 2 mins
-
-									gpio_put(GPS_ENABLE_PIN,1);	sleep_ms(2);  //gps off
-									gpio_put(VFO_ENABLE_PIN,1);sleep_ms(3);   //xmit oFf
-	
-									printf("Pio *STOP*  called by end of forced xmit. small pause before restart\n");
-									sleep_ms(2000);
-								}								
-				return -1;
-		 }
-  
-		 if(!is_GPS_available)
-		{
-			if (pctx->_txSched.verbosity>=1) StampPrintf(" Waiting for GPS receiver to start communicating, or, serial comms interrupted");
-			pctx->_txSched.led_mode = 0;  //waiting for GPS
-			return -1;
-		}
-	 
-		if(!is_GPS_active){
-			if (pctx->_txSched.verbosity>=1) StampPrintf("Gps was available, but no valid 3d Fix. ledmode %d XMIT status %d",pctx->_txSched.led_mode,pctx->_pTX->_p_oscillator->_is_enabled);
-		}
-
+//wuz add ons/offs as needed				//gpio_put(GPS_ENABLE_PIN,1);gpio_put(GPS_ENABLE_PIN,0);sleep_ms(2);  
+										//gpio_put(VFO_ENABLE_PIN,1);gpio_put(VFO_ENABLE_PIN,0);sleep_ms(3);   
+				
 		current_minute = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_last_digit_minutes - '0';  //convert from char to int
-	
-		int solar_angle=calc_solar_angle(pctx->_pTX->_p_oscillator->_pGPStime->_time_data.hour,pctx->_pTX->_p_oscillator->_pGPStime->_time_data.minute,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k, pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k);
+		current_second = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_last_digit_seconds - '0';  //convert from char to int
 
-	if (schedule[current_minute]==-1)        //if the current minute is an odd minute or a non-scheduled minute
+	if (schedule[current_minute]==-1)        				//if the current minute is an odd minute or a non-scheduled minute
+		for (int i=0;i < 10;i++) oneshots[i]=0;				//clear all oneshots
+		
+	
+
+
+	if (SEQ==10)
 	{
-		for (int i=0;i < 10;i++) oneshots[i]=0;
-		at_least_one_slot_has_elapsed=1;  
-
+		gpio_put(VFO_ENABLE_PIN,1);sleep_ms(2);gpio_put(GPS_ENABLE_PIN,0); //VFO off, GPS ON										
+		pctx->_pTX->_p_oscillator->_pGPStime->message_count=0;
+		SEQ=20;
 	}
-	
-	else if (is_GPS_available && at_least_one_slot_has_elapsed 
-			&& schedule[current_minute]>0
-			&& oneshots[current_minute]==0
-			&& (at_least_one_GPS_fixed_has_been_obtained!=0) )       //prevent transmission if a location has never been received
-		{
-			oneshots[current_minute]=1;	
-			if (pctx->_txSched.verbosity>=3) printf("\nStarting TX. current minute: %i Schedule Value (packet type): %i\n",current_minute,schedule[current_minute]);
-			if (schedule_band[current_minute] ==10)
-				pctx->_pTX->_u32_dialfreqhz = XMIT_FREQUENCY_10_METER;
+
+	if (SEQ==20)  //check for GPS comms
+	{
+		pctx->_txSched.led_mode = 0;  //no GPS serial Comms
+			if(pctx->_pTX->_p_oscillator->_pGPStime->message_count>1)
+			{
+				pctx->_txSched.led_mode = 1; //gps comms established, waiting for lock
+				SEQ=30;
+			}
+	}
+
+	if (SEQ==30)
+	{
+		pctx->_txSched.led_mode = 1;  //GPS serial Comms established
+
+			if(is_GPS_active)                                            //waiting for 3d fix
+				{
+					printf("going to Seq 40 GPS Seen\n");
+					SEQ=40;
+					pctx->_txSched.led_mode = 2; //gps is locked
+				}
+	}
+
+	if (SEQ==40)      //RECORD position    (will keep looping back here until time to xmit)
+	{		
+		strncpy(_4_char_version_of_locator, pctx->_pu8_locator, 4);     //only take first 4 chars of locator
+		_4_char_version_of_locator[4]=0;  //add null terminator
+		grid5 = pctx->_pu8_locator[4];  //record the values of grid chars 5 and 6 now, but they won't be used until packet type 2 is created
+		grid6 = pctx->_pu8_locator[5];		
+		pctx->grid7=grid7; //also record snapshot of chars 7 through 10 for extended telem
+		pctx->grid8=grid8;
+		pctx->grid9=grid9;
+		pctx->grid10=grid10;		
+		altitude_snapshot=pctx->_pTX->_p_oscillator->_pGPStime->_altitude;     //save the value for later when used in 2nd packet
+		SEQ=50;
+	}
+
+	if (SEQ==50)   //check if its time to start a slot transmission
+	{
+		if((schedule[current_minute]>0)&&(current_second==0))
+			SEQ=60;
 				else
-				pctx->_pTX->_u32_dialfreqhz = XMIT_FREQUENCY;
-
-			uint32_t freq_low = pctx->_pTX->_u32_dialfreqhz - 100;
-			uint32_t freq_high = pctx->_pTX->_u32_dialfreqhz + 300;
-
-//wuz			gpio_put(GPS_ENABLE_PIN,1);	sleep_ms(2);  //gps off
-	//wuz		gpio_put(VFO_ENABLE_PIN,0);sleep_ms(3);   //xmit on
-				gpio_put(GPS_ENABLE_PIN,0);gpio_put(VFO_ENABLE_PIN,0);       // ALL ON wuz
+				{
+					SEQ=40;        //if not time yet, jump back to 40 and keep track of changing position
+					//printf(" BACK to 40, current minute is %d current sec %d ",current_minute,current_second);
+				}
+	}
 
 			
+
+	if (SEQ==60) //GPS Off, VFO ON
+	{
+		start_time= get_absolute_time();  //record start time since GPS will now be off and no more time information
+		minute_of_following_packet=(current_minute+2)%10;   //the possible time of the next packet after this one		
+		gpio_put(GPS_ENABLE_PIN,1); sleep_ms(2);gpio_put(VFO_ENABLE_PIN,0);sleep_ms(2); //VFO ON, GPS off
+		SEQ=70;
+	}
+
+	if (SEQ==70) //create and send packet
+	{
+						if (pctx->_txSched.verbosity>=3) printf("\nStarting TX. current minute: %i Schedule Value (packet type): %i\n",current_minute,schedule[current_minute]);
+			pctx->_pTX->_u32_dialfreqhz = XMIT_FREQUENCY;
 			transmitter_status=1;
 			WSPRbeaconCreatePacket(pctx, schedule[current_minute] ); //the schedule determines packet type (1-4 for U4B 1st msg,U4B 2nd msg,Zachtek 1st, Zachtek 2nd)
 			sleep_ms(1000); //technically your supposed to wait 1 second after minute to begin TX
 			WSPRbeaconSendPacket(pctx); 
-			//if (schedule[current_minute]==2) {U4B_second_packet_has_started=1;U4B_second_packet_has_started_at_minute=current_minute;}
-			if (schedule[current_minute]==2) {U4B_second_packet_has_started=1;U4B_second_packet_has_started_at_minute=(current_minute+2)%10;} // the plus 2 at end is to allow 1 TELEN in low power mode
-		}
+			SEQ=80;		
+	}
 
+	if (SEQ==80)
+	{
+
+		if ((pctx->_pTX->_ix_output==162)&&(absolute_time_diff_us(start_time, get_absolute_time()) > 120000000ULL))  //wait for last bit to be sent, and 120 secs since start
+		SEQ=90;
+	}
+
+
+	if (SEQ==90)   //check if this next slot has a packet
+	{
+		
+		if(schedule[minute_of_following_packet]>0)
+			{
+				start_time= get_absolute_time();
+				minute_of_following_packet=(minute_of_following_packet+2)%10;  //increment for following possible telen paks
+				SEQ=70;
+			}	
+		else
+			SEQ=10;   //turn GPS back on
+
+	}
+
+
+
+		
 /*				1 - No valid GPS, not transmitting
 				2 - Valid GPS, waiting for time to transmitt
 				3 - Valid GPS, transmitting
-				4 - no valid GPS, but (still) transmitting anyway */
+				4 - no valid GPS, but (still) transmitting anyway 
 			if (!is_GPS_active && transmitter_status) pctx->_txSched.led_mode = 4; else
-			pctx->_txSched.led_mode = 1 + is_GPS_active + transmitter_status;
+wuz do led mode somhow			pctx->_txSched.led_mode = 1 + is_GPS_active + transmitter_status;
+*
 
-			if (previous_msg_count!=is_GPS_available)
+/*			if (previous_msg_count!=is_GPS_available)
 			{
 			previous_msg_count=is_GPS_available;
 			time_of_last_serial_packet= get_absolute_time();
@@ -303,29 +331,12 @@ else
 
 			 if(absolute_time_diff_us(time_of_last_serial_packet, get_absolute_time()) > 3000000ULL) //if more than one or two serial packets are missed something is wrong
 			 {
-				pctx->_txSched.led_mode = 0;  //no GPS serial Comms
+wuz need a way to detect loss og gps duing 				pctx->_txSched.led_mode = 0;  //no GPS serial Comms
 			 }
-
-		if ((pctx->_txSched.low_power_mode)&&(U4B_second_packet_has_started)&&(current_minute==((U4B_second_packet_has_started_at_minute+2)%10))) //time to sleep to save battery power
-		{
-			/* removing for now because 1) sleep doesnt work with new PLL setup and 2) updated pico-extras caused issues
-			datetime_t t = {.year  = 2020,.month = 01,.day= 01, .dotw= 1,.hour=1,.min= 1,.sec = 00};
-			// Start the RTC
-			rtc_init();
-			rtc_set_datetime(&t);
-			uart_default_tx_wait_blocking();
-			datetime_t alarm_time = t;
-			alarm_time.min += (46-3);	//sleep for 55 minutes. 46 ~= 55 mins X (115Mhz/133Mhz)  // the -3 is to allow 1 TELEN in low power mode
-			gpio_set_irq_enabled(GPS_PPS_PIN, GPIO_IRQ_EDGE_RISE, false); //this is needed to disable IRQ callback on PPS
-			pico_fractional_pll_deinit();  //this is needed?, otherwise causes instant reboot
-			sleep_run_from_dormant_source(DORMANT_SOURCE_ROSC);  //this reduces sleep draw to 2mA! (without this will still sleep, but only at 8mA)
-			sleep_goto_sleep_until(&alarm_time, &sleep_callback);	//blocks here during sleep perfiod
-			{watchdog_enable(100, 1);for(;;)	{} }  //recovering from sleep is messy, this makes it reboot to get a fresh start  */
-		}
-   
+*/
+ 
 		if (transmitter_status==0)            //when not xmitting, constantly (re)sets idle voltage. If xmitting is on
 		pctx->_txSched.voltage_at_idle=pctx->_txSched.voltage;
-
 		if ((transmitter_status==1)&&(schedule[current_minute]==1))   //if transmitting, AND if doing the 1st packet, (re)sets XMIT voltage. so the voltage that DEXT sends will have been recorded right at the end of the 1st packet
 		pctx->_txSched.voltage_at_xmit=pctx->_txSched.voltage;
    
@@ -334,30 +345,12 @@ else
 //******************************************************************************************************************************
 int WSPRbeaconCreatePacket(WSPRbeaconContext *pctx,int packet_type)  //1-6.  1: U4B 1st msg,U4B 2: 2nd msg, 3: Zachtek 1st, 4: Zachtek 2nd 5:U4B telen 1, 6:U4B telen 2
 {
-   /*     if(0 == ++tikk % 2)    //turns a fan on via GPIO 18 every other packet. this forces temperature swings for testing TCXO stability   
-		gpio_put(18, 1);
-       if(0 == (tikk+1) % 2)
-		gpio_put(18, 0);  */
-
-
 
    if (packet_type==1)   //U4B first msg
    {
 	pctx->_u8_txpower =10;               //hardcoded at 10dbM when doing u4b MSG 1
-	if (pctx->_txSched.verbosity>=3) printf("creating U4B packet 1\n");
-	char _4_char_version_of_locator[5];
-	strncpy(_4_char_version_of_locator, pctx->_pu8_locator, 4);     //only take first 4 chars of locator
-	_4_char_version_of_locator[4]=0;  //add null terminator
-	wspr_encode(pctx->_pu8_callsign, _4_char_version_of_locator, pctx->_u8_txpower, pctx->_pu8_outbuf, pctx->_txSched.verbosity);   // look in WSPRutility.c for wspr_encode
-	grid5 = pctx->_pu8_locator[4];  //record the values of grid chars 5 and 6 now, but they won't be used until packet type 2 is created
-    grid6 = pctx->_pu8_locator[5];		
-	pctx->grid7=grid7; //also record snapshot of chars 7 through 10 for extended telem
-	pctx->grid8=grid8;
-	pctx->grid9=grid9;
-	pctx->grid10=grid10;
-	printf("Saved Grid for Xmit: %s%c%c%c%c%c%c lat/lon: %lld %lld\n", _4_char_version_of_locator,grid5,grid6,grid7,grid8,grid9,grid10,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k);
-	altitude_snapshot=pctx->_pTX->_p_oscillator->_pGPStime->_altitude;     //save the value for later when used in 2nd packet
-	at_least_one_first_packet_sent=1;
+				if (pctx->_txSched.verbosity>=3){ printf("creating U4B packet 1\n");printf("location for Xmit: %s%c%c%c%c%c%c lat/lon: %lld %lld\n", _4_char_version_of_locator,grid5,grid6,grid7,grid8,grid9,grid10,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k);}				
+	wspr_encode(pctx->_pu8_callsign, _4_char_version_of_locator, pctx->_u8_txpower, pctx->_pu8_outbuf, pctx->_txSched.verbosity);   // look in utility.c for wspr_encode
    }
  if (packet_type==2)   // special encoding for 2nd packet of U4B protocol aka "standard" telemetry
    {
@@ -366,13 +359,7 @@ int WSPRbeaconCreatePacket(WSPRbeaconContext *pctx,int packet_type)  //1-6.  1: 
 	char Grid_U4B[7]; 
 	uint8_t  power_U4B;
 
-	if (at_least_one_first_packet_sent==0) // if a first packet was never created, the snapshots are incorrect. so put something in there. (issue %46)
-	{
-		grid5 = pctx->_pu8_locator[4];  //record the values of grid chars 5 and 6 now, but they won't be used until packet type 2 is created
-		grid6 = pctx->_pu8_locator[5];
-		altitude_snapshot=pctx->_pTX->_p_oscillator->_pGPStime->_altitude;
-		at_least_one_first_packet_sent==1;  //so it wont do this next time...
-	}
+
 
 /* inputs:  pctx->_pu8_locator (6 char grid)
 			pctx->_txSched->temp_in_Celsius
@@ -566,27 +553,8 @@ int WSPRbeaconSendPacket(const WSPRbeaconContext *pctx)
 void WSPRbeaconDumpContext(const WSPRbeaconContext *pctx)  //called ~ every 20 secs from main.c
 {
     const uint64_t u64tmnow = GetUptime64();
-
     StampPrintf("__________________");
-   /* StampPrintf("=TxChannelContext=");
-    StampPrintf("ftc:%llu", pctx->_pTX->_tm_future_call);
-    StampPrintf("ixi:%u", pctx->_pTX->_ix_input);
-    StampPrintf("dfq:%lu", pctx->_pTX->_u32_dialfreqhz);
-    StampPrintf("gpo:%u", pctx->_pTX->_i_tx_gpio);   */
     GPStimeContext *pGPS = pctx->_pTX->_p_oscillator->_pGPStime;
-    /*const uint32_t u32_unixtime_now = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u32_utime_nmea_last + u64_GPS_last_age_sec;
-
-    StampPrintf("=GPStimeContext=");
-    StampPrintf("err:%ld", pGPS->_i32_error_count);
-    StampPrintf("ixw:%lu", pGPS->_u8_ixw);
-    StampPrintf("sol:%u", pGPS->_time_data._u8_is_solution_active);
-    StampPrintf("unl:%lu", pGPS->_time_data._u32_utime_nmea_last);
-    StampPrintf("snl:%llu", pGPS->_time_data._u64_sysclk_nmea_last);
-    StampPrintf("age:%llu", u64_GPS_last_age_sec);
-    StampPrintf("utm:%lu", u32_unixtime_now);      
-    StampPrintf("rmc:%lu", pGPS->_time_data._u32_nmea_gprmc_count); */ 
-    StampPrintf("ppb:%lld", pGPS->_time_data._i32_freq_shift_ppb); 
-
 	StampPrintf("LED Mode: %d",pctx->_txSched.led_mode);
 	//StampPrintf("Grid: %s",(char *)WSPRbeaconGetLastQTHLocator(pctx));
 	StampPrintf("lat: %lli",pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k);
@@ -650,24 +618,5 @@ char EncodeBase36(uint8_t val)
 
         return retVal;
     }
-/// @brief Sets dial (baseband minima) freq.
-/// @param pctx Context.
-/// @param freq_hz the freq., Hz.
-//******************************************************************************************************************************
-void WSPRbeaconSetDialFreq(WSPRbeaconContext *pctx, uint32_t freq_hz)
-{
-    pctx->_pTX->_u32_dialfreqhz = freq_hz;
-}
 
-/// @brief Constructs a new WSPR packet using the data available.
-/// @param pctx Context
-/// @return 0 if OK.
-//******************************************************************************************************************************
-int calc_solar_angle(int hour, int min, int64_t int_lat, int64_t int_lon)
-{
-  double lat = 1e-7 * (double)int_lat;
-  double lon = 1e-7 * (double)int_lon;
-  
-  //printf(" utc hour: %i minute: %i lat: %f lon: %f\n",hour,min,lat,lon);
 
-}

@@ -26,23 +26,19 @@ GPStimeContext *GPStimeInit(int uart_baud)
     gpio_set_function(9, GPIO_FUNC_UART);
     
     GPStimeContext *pgt = calloc(1, sizeof(GPStimeContext));
-
-    pgt->_uart_baudrate = uart_baud;
+	pgt->_uart_baudrate = uart_baud;
 
     spGPStimeContext = pgt;
     spGPStimeData = &pgt->_time_data;
-
-
     uart_set_hw_flow(uart1, false, false);
     uart_set_format(uart1, 8, 1, UART_PARITY_NONE);
-    uart_set_fifo_enabled(uart1, false);  //this turns off the internal FIFO and makes chas come in one at a time
+    uart_set_fifo_enabled(uart1, false);  //this turns off the internal FIFO and makes chars come in one at a time
     irq_set_exclusive_handler(UART1_IRQ, GPStimeUartRxIsr);
     irq_set_enabled(UART1_IRQ, true);
     uart_set_irq_enables(uart1, true, false);
-
-    return pgt;
+    
+	return pgt;
 }
-
 
 void GPStimeDestroy(GPStimeContext **pp)
 {
@@ -53,10 +49,7 @@ void GPStimeDestroy(GPStimeContext **pp)
     *pp = NULL;
 }
 
-
-
 ///  UART FIFO ISR. Processes another N chars received from GPS receiver
-
 void RAM (GPStimeUartRxIsr)()
 {
     if((spGPStimeContext))
@@ -98,9 +91,8 @@ int parse_GPS_data(GPStimeContext *pg)
 	
 	if(prmc)
     {
-        ++pg->_time_data._u32_nmea_gprmc_count;   
-		if ((spGPStimeContext->verbosity>=7)&&(spGPStimeContext->user_setup_menu_active==0 )) 	printf("Found GxGGA len: %d  full buff: %s",sizeof(pg->_pbytebuff),(char *)pg->_pbytebuff);// printf("prmc found: %s\n",(char *)prmc);
-
+								if ((spGPStimeContext->verbosity>=7)&&(spGPStimeContext->user_setup_menu_active==0 )) 	printf("Found GxGGA len: %d  full buff: %s",sizeof(pg->_pbytebuff),(char *)pg->_pbytebuff);// printf("prmc found: %s\n",(char *)prmc);
+		pg->message_count++;      //valid mesg count
         uint64_t tm_fix = GetUptime64();
         uint8_t u8ixcollector[16] = {0};   //collects locations of commas
         uint8_t chksum = 0;
@@ -117,19 +109,18 @@ int parse_GPS_data(GPStimeContext *pg)
             }
         }		
 		pg->_time_data._u8_last_digit_minutes= *(prmc + u8ixcollector[0] + 3);
+		pg->_time_data._u8_last_digit_seconds= *(prmc + u8ixcollector[0] + 5);
 		char first_digit_minute=*(prmc + u8ixcollector[0] + 2);		
 		pg->_time_data._u8_last_digit_hour= *(prmc + u8ixcollector[0] + 1);		
 		char first_digit_hour = *(prmc + u8ixcollector[0]);			
 		pg->_time_data.minute= 10*(first_digit_minute-'0')+ (pg->_time_data._u8_last_digit_minutes-'0');
 		pg->_time_data.hour =10*(first_digit_hour-'0')+ (pg->_time_data._u8_last_digit_hour-'0');		
 		strncpy(pg->_time_data._full_time_string, (const char *)prmc + u8ixcollector[0], 6);pg->_time_data._full_time_string[6]=0;
-		
-		//printf(" utc hour: %i minute: %i\n",pg->_time_data.hour,pg->_time_data.minute);
-		
+				
         pg->_time_data._u8_is_solution_active = (prmc[u8ixcollector[5]]>48);   //numeric 0 for no fix, 1 2 or 3 for various fix types //printf("char is: %c\n",prmc[u8ixcollector[5]]);
 		pg->_time_data.sat_count = atoi((const char *)prmc + u8ixcollector[6]); 
 		
-		if ((spGPStimeContext->verbosity>=6)&&(spGPStimeContext->user_setup_menu_active==0 )) printf("sat count: %d\n",pg->_time_data.sat_count);
+															if ((spGPStimeContext->verbosity>=6)&&(spGPStimeContext->user_setup_menu_active==0 )) printf("sat count: %d\n",pg->_time_data.sat_count);
 
         if(pg->_time_data._u8_is_solution_active)
         {											 
@@ -181,7 +172,6 @@ int parse_GPS_data(GPStimeContext *pg)
 void GPStimeDump(const GPStimeData *pd)
 {
     printf("\nGPS solution is active:%u\n", pd->_u8_is_solution_active);
-    printf("GxGGA count:%lu\n", pd->_u32_nmea_gprmc_count);
     printf("GPS Latitude:%lld Longtitude:%lld\n", pd->_i64_lat_100k, pd->_i64_lon_100k);
 
 }

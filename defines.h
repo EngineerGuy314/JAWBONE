@@ -140,16 +140,15 @@
 typedef struct
 {
     uint8_t _u8_is_solution_active;             /* A navigation solution is valid. */
+
 	uint8_t sat_count;
     char _u8_last_digit_minutes;                /* First digit of the minutes. Really, this is the only thing needed to sequence messages. */
+    char _u8_last_digit_seconds;               
     char _u8_last_digit_hour;  
 	char _full_time_string[7];
 	uint32_t hour;
 	uint32_t minute;
     int64_t _i64_lat_100k, _i64_lon_100k;       /* The lat, lon, degrees, multiplied by 1e5. */
-    uint32_t _u32_nmea_gprmc_count;             /* The count of $GPRMC sentences received */
-    uint8_t _ix_last;                           /* An index of last write to sliding window. */
-    int64_t _i32_freq_shift_ppb;                /* Calcd frequency shift, parts per billion. */
 	
 } GPStimeData;
 
@@ -171,6 +170,8 @@ typedef struct
 	int8_t temp_in_Celsius;
 	int8_t verbosity;
     int8_t Optional_Debug;
+    uint32_t message_count;   //#valid GPS serial messages          		/* number of text bursts from GPS mod. */
+
 
 } GPStimeContext;
 
