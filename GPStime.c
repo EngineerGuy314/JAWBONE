@@ -109,7 +109,7 @@ int parse_GPS_data(GPStimeContext *pg)
             }
         }		
 		pg->_time_data._u8_last_digit_minutes= *(prmc + u8ixcollector[0] + 3);
-		pg->_time_data._u8_last_digit_seconds= *(prmc + u8ixcollector[0] + 5);
+		pg->_time_data._seconds= atoi(((const char *)prmc + u8ixcollector[0] + 4));
 		char first_digit_minute=*(prmc + u8ixcollector[0] + 2);		
 		pg->_time_data._u8_last_digit_hour= *(prmc + u8ixcollector[0] + 1);		
 		char first_digit_hour = *(prmc + u8ixcollector[0]);			
@@ -125,6 +125,7 @@ int parse_GPS_data(GPStimeContext *pg)
         if(pg->_time_data._u8_is_solution_active)
         {											 
 
+//			printf("_u8_is_solution_active: %d GxGGA len: %d  contents %s  minute last dig : %c seconds: %d ",pg->_time_data._u8_is_solution_active,sizeof(pg->_pbytebuff),(char *)pg->_pbytebuff,pg->_time_data._u8_last_digit_minutes,pg->_time_data._seconds);
 			char firstTwo[3]; // Array to hold the first two characters
 			strncpy(firstTwo, (const char *)prmc + u8ixcollector[1], 2);
 			firstTwo[2] = '\0'; // Null terminate the string

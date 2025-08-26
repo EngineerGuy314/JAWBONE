@@ -143,7 +143,7 @@ typedef struct
 
 	uint8_t sat_count;
     char _u8_last_digit_minutes;                /* First digit of the minutes. Really, this is the only thing needed to sequence messages. */
-    char _u8_last_digit_seconds;               
+    uint8_t _seconds;               
     char _u8_last_digit_hour;  
 	char _full_time_string[7];
 	uint32_t hour;

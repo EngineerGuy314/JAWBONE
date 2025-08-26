@@ -28,6 +28,7 @@ static int itx_trigger2 = 0;
 static int forced_xmit_in_process = 0;
 static int transmitter_status = 0;	
 static absolute_time_t start_time;
+static absolute_time_t start_time_of_GPS_search;
 static absolute_time_t time_of_last_serial_packet;
 static int current_minute;
 static int current_second;
@@ -216,7 +217,9 @@ else
 	{
 		gpio_put(VFO_ENABLE_PIN,1);sleep_ms(2);gpio_put(GPS_ENABLE_PIN,0); //VFO off, GPS ON										
 		pctx->_pTX->_p_oscillator->_pGPStime->message_count=0;
+		start_time_of_GPS_search=get_absolute_time();
 		SEQ=20;
+		printf("enabling GPS\n");
 	}
 
 	if (SEQ==20)  //check for GPS comms
@@ -226,6 +229,7 @@ else
 			{
 				pctx->_txSched.led_mode = 1; //gps comms established, waiting for lock
 				SEQ=30;
+				printf("GPS serial comms est\n");
 			}
 	}
 
@@ -235,7 +239,7 @@ else
 
 			if(is_GPS_active)                                            //waiting for 3d fix
 				{
-					printf("going to Seq 40 GPS Seen\n");
+					printf("Position Lock received! it took %.1f secs\n",absolute_time_diff_us(start_time, get_absolute_time())/1000000.0);
 					SEQ=40;
 					pctx->_txSched.led_mode = 2; //gps is locked
 				}
@@ -258,14 +262,17 @@ else
 	if (SEQ==50)   //check if its time to start a slot transmission   wuz what if gps lost while waiting?
 	{
 		current_minute = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_last_digit_minutes - '0';  //convert from char to int
-		current_second = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_last_digit_seconds - '0';  //convert from char to int
+		current_second = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._seconds;
 
 		if((schedule[current_minute]>0)&&(current_second==0))
+		{
 			SEQ=60;
+			printf("About to start packet. current mind: %d current sec %d slot time at this minute: %d time since initial GPS lock: %.1f secs\n",current_minute,current_second,schedule[current_minute],absolute_time_diff_us(start_time, get_absolute_time())/1000000.0);
+			
+		}
 				else
 				{
 					SEQ=40;        //if not time yet, jump back to 40 and keep track of changing position
-					//printf(" BACK to 40, current minute is %d current sec %d ",current_minute,current_second);
 				}
 	}
 
@@ -288,13 +295,17 @@ else
 			WSPRbeaconSendPacket(pctx); 
 			current_minute=(current_minute+2)%10;   //increment in case we come back around here without re-enabling gps
 			SEQ=80;		
+			printf("stating pak, current minute (after increment) is %d ",current_minute);
 	}
 
 	if (SEQ==80)
 	{
 
 		if ((pctx->_pTX->_ix_output==162)&&(absolute_time_diff_us(start_time, get_absolute_time()) > 120000000ULL))  //wait for last bit to be sent, and 120 secs since start
-		SEQ=90;
+		{
+			SEQ=90;
+			printf("end of pak detected time since initial GPS lock: %.1f secs\n",absolute_time_diff_us(start_time, get_absolute_time())/1000000.0);			
+		}
 	}
 
 
@@ -305,9 +316,13 @@ else
 			{
 				start_time= get_absolute_time();
 				SEQ=70;
+				printf("going to do aother pak immediately\n");
 			}	
 		else
+		{
 			SEQ=10;   //turn GPS back on
+			printf("no pak next, turning GPS back on. time since initial GPS lock: %.1f secs\n",absolute_time_diff_us(start_time, get_absolute_time())/1000000.0);			
+		}
 
 	}
 
