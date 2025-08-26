@@ -21,7 +21,6 @@ static char grid9;
 static char grid10;
 static float altitude_snapshot;
 static int rf_pin;
-static int minute_of_following_packet;
 static int U4B_second_packet_has_started = 0;
 static int U4B_second_packet_has_started_at_minute;
 static int itx_trigger = 0;
@@ -206,8 +205,6 @@ else
 //wuz add ons/offs as needed				//gpio_put(GPS_ENABLE_PIN,1);gpio_put(GPS_ENABLE_PIN,0);sleep_ms(2);  
 										//gpio_put(VFO_ENABLE_PIN,1);gpio_put(VFO_ENABLE_PIN,0);sleep_ms(3);   
 				
-		current_minute = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_last_digit_minutes - '0';  //convert from char to int
-		current_second = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_last_digit_seconds - '0';  //convert from char to int
 
 	if (schedule[current_minute]==-1)        				//if the current minute is an odd minute or a non-scheduled minute
 		for (int i=0;i < 10;i++) oneshots[i]=0;				//clear all oneshots
@@ -258,8 +255,11 @@ else
 		SEQ=50;
 	}
 
-	if (SEQ==50)   //check if its time to start a slot transmission
+	if (SEQ==50)   //check if its time to start a slot transmission   wuz what if gps lost while waiting?
 	{
+		current_minute = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_last_digit_minutes - '0';  //convert from char to int
+		current_second = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_last_digit_seconds - '0';  //convert from char to int
+
 		if((schedule[current_minute]>0)&&(current_second==0))
 			SEQ=60;
 				else
@@ -274,7 +274,6 @@ else
 	if (SEQ==60) //GPS Off, VFO ON
 	{
 		start_time= get_absolute_time();  //record start time since GPS will now be off and no more time information
-		minute_of_following_packet=(current_minute+2)%10;   //the possible time of the next packet after this one		
 		gpio_put(GPS_ENABLE_PIN,1); sleep_ms(2);gpio_put(VFO_ENABLE_PIN,0);sleep_ms(2); //VFO ON, GPS off
 		SEQ=70;
 	}
@@ -287,6 +286,7 @@ else
 			WSPRbeaconCreatePacket(pctx, schedule[current_minute] ); //the schedule determines packet type (1-4 for U4B 1st msg,U4B 2nd msg,Zachtek 1st, Zachtek 2nd)
 			sleep_ms(1000); //technically your supposed to wait 1 second after minute to begin TX
 			WSPRbeaconSendPacket(pctx); 
+			current_minute=(current_minute+2)%10;   //increment in case we come back around here without re-enabling gps
 			SEQ=80;		
 	}
 
@@ -301,10 +301,9 @@ else
 	if (SEQ==90)   //check if this next slot has a packet
 	{
 		
-		if(schedule[minute_of_following_packet]>0)
+		if(schedule[current_minute]>0)
 			{
 				start_time= get_absolute_time();
-				minute_of_following_packet=(minute_of_following_packet+2)%10;  //increment for following possible telen paks
 				SEQ=70;
 			}	
 		else
