@@ -221,10 +221,7 @@ typedef struct
 	uint32_t TELEN2_val1;
 	uint32_t TELEN2_val2;
 	uint32_t minutes_since_boot;
-	uint32_t minutes_since_GPS_aquisition;
-	uint32_t seconds_since_GPS_aquisition;
-	uint32_t seconds_since_GPS_loss;
-	uint32_t seconds_it_took_FIRST_GPS_lock;
+	uint32_t seconds_for_lock;
 	uint32_t max_sats_seen_today;
 	uint8_t low_power_mode;
 

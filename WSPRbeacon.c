@@ -128,8 +128,6 @@ WSPRbeaconContext *WSPRbeaconInit(const char *pcallsign, const char *pgridsquare
 
 	for (int i=0;i < 10;i++) schedule[i]=-1;
 	p->_txSched.minutes_since_boot=0;
-	p->_txSched.minutes_since_GPS_aquisition=99999; minute_OF_GPS_aquisition=0;
-	p->_txSched.seconds_it_took_FIRST_GPS_lock=1800;
 	p->_txSched.max_sats_seen_today=0;
 
 	/* Following code sets packet types for each timeslot. 1:U4B 1st msg, 2: U4B 2nd msg, 3: WSPR1 or Zachtek 1st, 4:Zachtek 2nd,  5:extended TELEN #1 6:extended TELEN #2  */	
@@ -173,40 +171,6 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
     const uint32_t is_GPS_active = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_is_solution_active;  //on if valid 3d fix
 	pctx->_txSched.minutes_since_boot=floor((to_ms_since_boot(get_absolute_time()) / (uint32_t)60000) );     //used for DEXT
 	
-	
-/*  wuz gps ackk and loss times for DEXT need re-doing
-	
-	if (OLD_GPS_active_status!=is_GPS_active) //GPS status has changed
-	{
-		OLD_GPS_active_status=is_GPS_active; //make it a oneshot
-		if (is_GPS_active) minute_OF_GPS_aquisition = pctx->_txSched.minutes_since_boot;   //it changed, and is now ON so save time it last went on				
-
-		if (is_GPS_active)                         
-			GPS_aquisiion_time=get_absolute_time(); 
-		else
-			GPS_loss_time=get_absolute_time(); 
-	}
-if (is_GPS_active)
-{
-	pctx->_txSched.minutes_since_GPS_aquisition = pctx->_txSched.minutes_since_boot-minute_OF_GPS_aquisition; //current time minus time it last went on is MINUTES since on
-	pctx->_txSched.seconds_since_GPS_aquisition=floor(absolute_time_diff_us(GPS_aquisiion_time, get_absolute_time()) / (int64_t)1000000);
-	pctx->_txSched.seconds_since_GPS_loss=0;
-	if (pctx->_txSched.seconds_it_took_FIRST_GPS_lock==1800) pctx->_txSched.seconds_it_took_FIRST_GPS_lock=floor((get_absolute_time()) / (int64_t)1000000);
-}
-else
-{
-	pctx->_txSched.minutes_since_GPS_aquisition = 0;  //fixed july 2025. until now, if gps was locked, then lost, the mins since GPS lock kept going up! (you would still see sat-count=0, *if* you were looking at it
-	pctx->_txSched.seconds_since_GPS_aquisition=0;
-	pctx->_txSched.seconds_since_GPS_loss=floor(absolute_time_diff_us(GPS_loss_time, get_absolute_time()) / (int64_t)1000000);
-
-}
-*/
-
-//wuz add ons/offs as needed				//gpio_put(GPS_ENABLE_PIN,1);gpio_put(GPS_ENABLE_PIN,0);sleep_ms(2);  
-										//gpio_put(VFO_ENABLE_PIN,1);gpio_put(VFO_ENABLE_PIN,0);sleep_ms(3);   
-				
-
-
 	if (SEQ==10)
 	{
 		gpio_put(VFO_ENABLE_PIN,1);sleep_ms(2);gpio_put(GPS_ENABLE_PIN,0); //VFO off, GPS ON										
@@ -235,6 +199,7 @@ else
 																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	printf("Position Lock received! it took %.1f secs\n",absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0);
 					SEQ=40;
 					pctx->_txSched.led_mode = 2; //gps is locked
+					pctx->_txSched.seconds_for_lock=absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0;
 				}
 	}
 

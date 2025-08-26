@@ -8,12 +8,16 @@ This is an evolution of my  [pico-WSPRer](https://github.com/EngineerGuy314/pico
 I owe great thanks and acknowledgement to Roman Piksaykin (https://github.com/RPiks/) for the original program that was the starting point for pico-WSPRer. Much of his code still lives on inside JAWBONE and I have tried to maintain his copyright information in all relevant files.
 
 
+Rp2040 main clock runs at only 18Mhz.
+Current consumption (3.3V):
+idle: 10mA
+w/GPS: 34mA
+w/MS5351: 56mA  (transmitting double ended into 70ohm)
 
-*sometimes* both clocks on same phase? hmm, 
 
 
 random notes:
-try 18Mhz for best Klock speed?
+
 Optional_Debug bitmapping (MSB to LSB)
 	7-
 	6-.,
@@ -24,7 +28,9 @@ Optional_Debug bitmapping (MSB to LSB)
 	1-IO Status
 	0-raw GPS dump
 
-prelim power notes: (kevins board)
+
+
+power notes: (donor board)
 18Mhz @ 5V 
 idel: 10mA
 w/GPS: 34mA
@@ -36,3 +42,4 @@ idle 27mA
 w/gps 52mA
 w/si no load 64mA
 w/ 70 Ohm    74mA
+

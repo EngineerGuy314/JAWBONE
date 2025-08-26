@@ -227,7 +227,7 @@ void process_TELEN_data(void)
 				case '-':  break; //do nothing, telen chan is disabled
 				case '0': 			//Minutes Since Boot, Minutes since GPS fix, GPS Valid, Sat Count (max: 1000,1000,1,60)
 							pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){pWSPR->_txSched.minutes_since_boot,1001}; 
-							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){pWSPR->_txSched.minutes_since_GPS_aquisition,1001}; 
+							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){pWSPR->_txSched.seconds_for_lock,1001}; 
 							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){pWSPR->_pTX->_p_oscillator->_pGPStime->_time_data._u8_is_solution_active,2}; 
 							pWSPR->telem_vals_and_ranges[i][3]=(v_and_r){pWSPR->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count,61}; 
 							break;
@@ -268,7 +268,7 @@ void process_TELEN_data(void)
 							pWSPR->telem_vals_and_ranges[i][2 ]=(v_and_r){pWSPR->grid9 -'A',24}; 
 							pWSPR->telem_vals_and_ranges[i][3 ]=(v_and_r){pWSPR->grid10-'A',24}; 
 							pWSPR->telem_vals_and_ranges[i][4]=(v_and_r){(int)round(pWSPR->_txSched.minutes_since_boot/10.0),101}; 
-							pWSPR->telem_vals_and_ranges[i][5]=(v_and_r){(int)round(pWSPR->_txSched.minutes_since_GPS_aquisition/10.0),101}; 			
+							pWSPR->telem_vals_and_ranges[i][5]=(v_and_r){(int)round(pWSPR->_txSched.seconds_for_lock/40.0),101}; 			
 							break;
 							
 				case '6': 			//idle and xmit volts, some low res times            
@@ -276,21 +276,22 @@ void process_TELEN_data(void)
 							pWSPR->telem_vals_and_ranges[i][0 ]=(v_and_r){ (int)round(100*pWSPR->_txSched.voltage_at_idle) ,501}; 
 							pWSPR->telem_vals_and_ranges[i][1 ]=(v_and_r){ (int)round(100*pWSPR->_txSched.voltage_at_xmit) ,501}; 
 							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){(int)round(pWSPR->_txSched.minutes_since_boot/10.0),61}; 
-							pWSPR->telem_vals_and_ranges[i][3]=(v_and_r){(int)round(pWSPR->_txSched.minutes_since_GPS_aquisition/20.0),61}; 			
+							pWSPR->telem_vals_and_ranges[i][3]=(v_and_r){(int)round(pWSPR->_txSched.seconds_for_lock/40.0),61}; 			
 							
 							break;
 
 				case '7': 			//high res GPS lock/loss times
 
+							/*  not applicable for JAWBONE
 							pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){pWSPR->_txSched.seconds_since_GPS_aquisition,3601}; 
-							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){pWSPR->_txSched.seconds_since_GPS_loss,3601}; 
+							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){pWSPR->_txSched.seconds_since_GPS_loss,3601}; */
 							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){(int)round(pWSPR->_txSched.minutes_since_boot/10.0),37}; 									
 							
 							break;
 
 				case '8': 			//some things   (58-)
 							pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){pWSPR->_txSched.max_sats_seen_today,61}; 
-							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){pWSPR->_txSched.seconds_it_took_FIRST_GPS_lock,1801}; 
+							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){(uint32_t)pWSPR->_txSched.seconds_for_lock,1801}; 
 							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){round((float)adc_read() * conversionFactor * 3.0f * 10),901}; 									
 			}	
 		}
@@ -475,7 +476,7 @@ show_values();          /* shows current VALUES  AND list of Valid Commands */
 							write_NVRAM(); 
 						break;*/
 
-			case 'K':get_user_input("Klock speed: ", _Klock_speed, sizeof(_Klock_speed)); write_NVRAM(); break;
+			//case 'K':get_user_input("Klock speed: ", _Klock_speed, sizeof(_Klock_speed)); write_NVRAM(); break;
 			
 			case 'F':
 				printf("Fixed Frequency output (antenna tuning mode). Enter frequency (for example 14.097) or 0 for exit.\n\t");
@@ -498,10 +499,10 @@ show_values();          /* shows current VALUES  AND list of Valid Commands */
 				}
 				break;
 
-			case '<': {printf("< was pressed");InitPicoPins();gpio_put(VFO_ENABLE_PIN,0);I2C_init();sleep_ms(2);si5351aSetFrequency(1400000000);} break;
+			/*case '<': {printf("< was pressed");InitPicoPins();gpio_put(VFO_ENABLE_PIN,0);I2C_init();sleep_ms(2);si5351aSetFrequency(1400000000);} break;
 			case '>': {printf("> was pressed");InitPicoPins();gpio_put(GPS_ENABLE_PIN,0);} break;
 			case '?': {printf("? was pressed");InitPicoPins();gpio_put(VFO_ENABLE_PIN,1);gpio_put(GPS_ENABLE_PIN,1);} break;
-			case 'M': {	InitPicoPins();		gpio_put(GPS_ENABLE_PIN,0);		gpio_put(VFO_ENABLE_PIN,0);I2C_init();sleep_ms(2);si5351aSetFrequency(1400000000);} break;
+			case 'M': {	InitPicoPins();		gpio_put(GPS_ENABLE_PIN,0);		gpio_put(VFO_ENABLE_PIN,0);I2C_init();sleep_ms(2);si5351aSetFrequency(1400000000);} break;*/
 			case 13:  break;
 			case 10:  break;
 			default: printf(CLEAR_SCREEN); printf("\nYou pressed: %c - (0x%02x), INVALID choice!! ",c,c);sleep_ms(1000);break;		
@@ -594,13 +595,14 @@ void check_data_validity_and_set_defaults(void)
 	if ( (_custom_PCB[0]<'0') || (_custom_PCB[0]>'1')) {_custom_PCB[0]='0'; write_NVRAM();} //set default IO mapping to original Pi Pico configuration
 	if ( (_DEXT_config[0]<'0') || (_DEXT_config[0]>'F')) {strncpy(_DEXT_config,"---",3); write_NVRAM();}
 	if ( (_battery_mode[0]<'0') || (_battery_mode[0]>'1')) {_battery_mode[0]='0'; write_NVRAM();} //
-	if ( (atoi(_Klock_speed)<5) || (atoi(_Klock_speed)>300)) {strcpy(_Klock_speed,"114"); write_NVRAM();} 
+	if ( (atoi(_Klock_speed)<5) || (atoi(_Klock_speed)>300)) {strcpy(_Klock_speed,"18"); write_NVRAM();} 
 	if ( (atoi(_U4B_chan)<0) || (atoi(_U4B_chan)>599)) {strcpy(_U4B_chan,"599"); write_NVRAM();} 
 	if ( (_Datalog_mode[0]!='0') && (_Datalog_mode[0]!='1') && (_Datalog_mode[0]!='D') && (_Datalog_mode[0]!='W')) {_Datalog_mode[0]='0'; write_NVRAM();}
 	if ( (_band_hop[0]<'0') || (_band_hop[0]>'1')) {_band_hop[0]='0'; write_NVRAM();} //
 	if ( (_band[0]<'F') || (_band[0]>'M')) {_band[0]='H'; write_NVRAM();} //
 
 //certain modes have been hidden. following lines make sure they are not accidentally enabled from data corruption
+strcpy(_Klock_speed,"18");
 _battery_mode[0]='0';
 _Datalog_mode[0]='0';
 _band_hop[0]='0'; 
@@ -661,7 +663,7 @@ printf("Verbosity:%s\n\t",_verbosity);
 printf("Optional debug:%s\n\t",_Optional_Debug);
 //printf("custom Pcb IO mappings:%s\n\t",_custom_PCB);
 printf("Telemetry config:%s   (please set to '---' if unused)\n\t",_DEXT_config);
-printf("Klock speed (temp) :%sMhz  \n",_Klock_speed);
+//printf("Klock speed (temp) :%sMhz  \n",_Klock_speed);
 /*printf("Datalog mode:%s\n\t",_Datalog_mode);
 printf("Battery (low power) mode:%s\n\t",_battery_mode);
 printf("secret band Hopping mode:%s\n\n",_band_hop);*/
@@ -679,7 +681,7 @@ printf("V: Verbosity level (0 for no messages, 9 for too many) \n\t");
 printf("O: Optional debug functions (bitmapped 0 - 255) \n\t");
 //printf("P: custom Pcb mode IO mappings (0,1)\n\t");
 printf("T: Telemetry (dexT) config\n\t");
-printf("K: Klock speed  \n\t");
+//printf("K: Klock speed  \n\t");
 //printf("D: Datalog mode (0,1,(W)ipe memory, (D)ump memory) see wiki\n\t");
 //printf("B: Battery (low power) mode \n\t");
 printf("F: Frequency output (antenna tuning mode)\n\t");
@@ -1014,7 +1016,7 @@ if ( (length_of_input + found_byte_location)>FLASH_SECTOR_SIZE)  //then need to 
 
 }
 //////////////////////////
-void datalog_loop()
+void datalog_loop()          //datalogging is very out of date
 {
 	char string_to_log[400];
 	absolute_time_t GPS_wait_start_time;
@@ -1092,7 +1094,7 @@ void go_to_sleep()
 			*/
 }
 ////////////////////////////////////
-void process_chan_num()
+void process_chan_num()   //need to update for bands other than 20M
 {
 	if ( (atoi(_U4B_chan)>=0) && (atoi(_U4B_chan)<600)) 
 	{
@@ -1110,9 +1112,6 @@ void process_chan_num()
 		int txSlot = atoi(_U4B_chan) % 5;
 		
 		_start_minute[0] = '0' + (2*((txSlot+14)%5));
-		
-			
-
 
 	}
 }
@@ -1168,7 +1167,7 @@ void process_chan_num()
 { "name": "grid_char9",   "unit": "alpha",      "lowValue":   0,    "highValue":   23,    "stepSize":  1 },
 { "name": "grid_char10",  "unit": "alpha",      "lowValue":   0,  "highValue":     23,  "stepSize":  1 },
 { "name": "since_boot",   "unit": "minutes10",    "lowValue":   0,  "highValue":     100,  "stepSize":  1 },
-{ "name": "since_gps_lock",  "unit": "minutes10",  "lowValue":   0,  "highValue":     100,  "stepSize":  1 },
+{ "name": "time_for_lock_2s",  "unit": "double_secs",  "lowValue":   0,  "highValue":     100,  "stepSize":  1 },
 
 
 7:
