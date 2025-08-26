@@ -197,7 +197,7 @@ int main()
 				//if (pWB->_txSched.verbosity>=3) printf("TELEN Vals 1 through 4:  %d %d %d %d\n",telen_values[0],telen_values[1],telen_values[2],telen_values[3]);
 				}
 		
-		for (int i=0;i < 10;i++) //orig code had a 900mS pause here. I only pause a total of 500ms, and spend it polling the time to handle LED state
+		for (int i=0;i < 10;i++) //Implements a pause of total 500ms, and spends it handling LED output
 			{
 				handle_LED(pWB->_txSched.led_mode); 
 				sleep_ms(50); 
@@ -301,7 +301,7 @@ void handle_LED(int led_state)
 /**
  * @brief Handles setting LED to display mode.
  * 
- * @param led_state 1,2,3 or 4 to indicate the number of LED pulses. 0 is a special case indicating serial comm failure to GPS
+ * @param led_state 1,2 or 3to indicate the number of LED pulses. 0 is a special case indicating serial comm failure to GPS
  */
  			//////////////////////// LED HANDLING /////////////////////////////////////////////////////////
 			
@@ -310,8 +310,7 @@ void handle_LED(int led_state)
 				0 - no serial comms to GPS module
 				1 - No valid GPS, not transmitting
 				2 - Valid GPS, waiting for time to transmitt
-				3 - Valid GPS, transmitting
-				4 - no valid GPS, but (still) transmitting anyway
+				3 - Transmitting (GPS disabled)
 
 				x brief pulses to indicate mode, followed by pause. 0 is special case, continous rapid blink
 				there is also "breathing" to indicate corrupted NVRAM
@@ -322,7 +321,7 @@ void handle_LED(int led_state)
  uint64_t t = absolute_time_diff_us(LED_sequence_start_time, get_absolute_time());
  int i = t / 400000ULL;     //400mS total period of a LED flash
 
-  if (led_state==0) 						//special case indicating serial comm failure to GPS. blink as rapidly as possible 
+  if (led_state==0) 						//special case indicating serial comm failure from GPS. blink as rapidly as possible 
 		  {
 			if(0 == ++tik % 2) gpio_put(LED_PIN, 1); else gpio_put(LED_PIN, 0);     //very rapid
 		  }

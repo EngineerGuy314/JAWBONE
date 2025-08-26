@@ -126,7 +126,6 @@ WSPRbeaconContext *WSPRbeaconInit(const char *pcallsign, const char *pgridsquare
 
 	gpio_put(VFO_ENABLE_PIN,1); sleep_ms(1);gpio_put(GPS_ENABLE_PIN,0);      // power on GPS, power off VFO
 
-
 	for (int i=0;i < 10;i++) schedule[i]=-1;
 	p->_txSched.minutes_since_boot=0;
 	p->_txSched.minutes_since_GPS_aquisition=99999; minute_OF_GPS_aquisition=0;
@@ -207,11 +206,6 @@ else
 										//gpio_put(VFO_ENABLE_PIN,1);gpio_put(VFO_ENABLE_PIN,0);sleep_ms(3);   
 				
 
-	if (schedule[current_minute]==-1)        				//if the current minute is an odd minute or a non-scheduled minute
-		for (int i=0;i < 10;i++) oneshots[i]=0;				//clear all oneshots
-		
-	
-
 
 	if (SEQ==10)
 	{
@@ -219,7 +213,7 @@ else
 		pctx->_pTX->_p_oscillator->_pGPStime->message_count=0;
 		start_time_of_GPS_search=get_absolute_time();
 		SEQ=20;
-		printf("enabling GPS\n");
+																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	printf("enabling GPS\n");
 	}
 
 	if (SEQ==20)  //check for GPS comms
@@ -227,19 +221,18 @@ else
 		pctx->_txSched.led_mode = 0;  //no GPS serial Comms
 			if(pctx->_pTX->_p_oscillator->_pGPStime->message_count>1)
 			{
-				pctx->_txSched.led_mode = 1; //gps comms established, waiting for lock
 				SEQ=30;
-				printf("GPS serial comms est\n");
+																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	 printf("GPS serial comms est\n");
 			}
 	}
 
 	if (SEQ==30)
 	{
-		pctx->_txSched.led_mode = 1;  //GPS serial Comms established
+		pctx->_txSched.led_mode = 1;  //GPS serial Comms established,  But NO LOCK  yet
 
-			if(is_GPS_active)                                            //waiting for 3d fix
+			if(is_GPS_active)     //waiting for 3d fix
 				{
-					printf("Position Lock received! it took %.1f secs\n",absolute_time_diff_us(start_time, get_absolute_time())/1000000.0);
+																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	printf("Position Lock received! it took %.1f secs\n",absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0);
 					SEQ=40;
 					pctx->_txSched.led_mode = 2; //gps is locked
 				}
@@ -259,35 +252,41 @@ else
 		SEQ=50;
 	}
 
-	if (SEQ==50)   //check if its time to start a slot transmission   wuz what if gps lost while waiting?
+	if (SEQ==50)   //check if its time to start a slot transmission   
 	{
 		current_minute = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_last_digit_minutes - '0';  //convert from char to int
 		current_second = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._seconds;
 
 		if((schedule[current_minute]>0)&&(current_second==0))
+			{
+				SEQ=60;											//if time to start a packet
+																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	printf("About to start packet. current mind: %d current sec %d slot time at this minute: %d time since initial GPS lock: %.1f secs\n",current_minute,current_second,schedule[current_minute],absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0);
+				
+			}
+			else
+			{
+				SEQ=40;        //if not time yet, jump back to 40 and keep track of changing position
+			}
+		if(is_GPS_active==0) //check if GPS lock was lost while waiting to start Xmit
 		{
-			SEQ=60;
-			printf("About to start packet. current mind: %d current sec %d slot time at this minute: %d time since initial GPS lock: %.1f secs\n",current_minute,current_second,schedule[current_minute],absolute_time_diff_us(start_time, get_absolute_time())/1000000.0);
-			
+																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	printf("GPS lock lost while waiting to xmit! returning to state 30!");
+			SEQ=30;
 		}
-				else
-				{
-					SEQ=40;        //if not time yet, jump back to 40 and keep track of changing position
-				}
 	}
 
-			
 
 	if (SEQ==60) //GPS Off, VFO ON
 	{
+		pctx->_txSched.voltage_at_idle=pctx->_txSched.voltage; //save idle voltage
 		start_time= get_absolute_time();  //record start time since GPS will now be off and no more time information
 		gpio_put(GPS_ENABLE_PIN,1); sleep_ms(2);gpio_put(VFO_ENABLE_PIN,0);sleep_ms(2); //VFO ON, GPS off
+		pctx->_txSched.led_mode = 3; //TRansmittion in progress
 		SEQ=70;
 	}
 
 	if (SEQ==70) //create and send packet
 	{
-						if (pctx->_txSched.verbosity>=3) printf("\nStarting TX. current minute: %i Schedule Value (packet type): %i\n",current_minute,schedule[current_minute]);
+																		if (((pctx->_txSched.verbosity>=3)||(pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2)))) printf("\nStarting TX. current minute: %i Schedule Value (packet type): %i\n",current_minute,schedule[current_minute]);
 			pctx->_pTX->_u32_dialfreqhz = XMIT_FREQUENCY;
 			transmitter_status=1;
 			WSPRbeaconCreatePacket(pctx, schedule[current_minute] ); //the schedule determines packet type (1-4 for U4B 1st msg,U4B 2nd msg,Zachtek 1st, Zachtek 2nd)
@@ -295,16 +294,16 @@ else
 			WSPRbeaconSendPacket(pctx); 
 			current_minute=(current_minute+2)%10;   //increment in case we come back around here without re-enabling gps
 			SEQ=80;		
-			printf("stating pak, current minute (after increment) is %d ",current_minute);
+																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	printf("stating pak, current minute (after increment) is %d ",current_minute);
 	}
 
-	if (SEQ==80)
+	if (SEQ==80)       //wait for end of this packet being transmitted
 	{
 
 		if ((pctx->_pTX->_ix_output==162)&&(absolute_time_diff_us(start_time, get_absolute_time()) > 120000000ULL))  //wait for last bit to be sent, and 120 secs since start
 		{
 			SEQ=90;
-			printf("end of pak detected time since initial GPS lock: %.1f secs\n",absolute_time_diff_us(start_time, get_absolute_time())/1000000.0);			
+																			if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2)) printf("end of pak detected time since initial GPS lock: %.1f secs\n",absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0);			
 		}
 	}
 
@@ -312,48 +311,21 @@ else
 	if (SEQ==90)   //check if this next slot has a packet
 	{
 		
-		if(schedule[current_minute]>0)
+		if(schedule[current_minute]>0)	//if has a packet, do another packet immediately without re-enabling GPS
 			{
-				start_time= get_absolute_time();
+				start_time = get_absolute_time();     //reset "start_time" so we know when this packet ends
 				SEQ=70;
-				printf("going to do aother pak immediately\n");
+																				if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))printf("going to do aother pak immediately\n");
 			}	
 		else
 		{
-			SEQ=10;   //turn GPS back on
-			printf("no pak next, turning GPS back on. time since initial GPS lock: %.1f secs\n",absolute_time_diff_us(start_time, get_absolute_time())/1000000.0);			
+				pctx->_txSched.voltage_at_xmit=pctx->_txSched.voltage; //done xmitting so save voltage during xmit
+				SEQ=10;   //turn GPS back on
+																				if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))printf("no pak next, turning GPS back on. time since initial GPS lock: %.1f secs\n",absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0);			
 		}
 
 	}
-
-
-
 		
-/*				1 - No valid GPS, not transmitting
-				2 - Valid GPS, waiting for time to transmitt
-				3 - Valid GPS, transmitting
-				4 - no valid GPS, but (still) transmitting anyway 
-			if (!is_GPS_active && transmitter_status) pctx->_txSched.led_mode = 4; else
-wuz do led mode somhow			pctx->_txSched.led_mode = 1 + is_GPS_active + transmitter_status;
-*
-
-/*			if (previous_msg_count!=is_GPS_available)
-			{
-			previous_msg_count=is_GPS_available;
-			time_of_last_serial_packet= get_absolute_time();
-			}
-
-			 if(absolute_time_diff_us(time_of_last_serial_packet, get_absolute_time()) > 3000000ULL) //if more than one or two serial packets are missed something is wrong
-			 {
-wuz need a way to detect loss og gps duing 				pctx->_txSched.led_mode = 0;  //no GPS serial Comms
-			 }
-*/
- 
-		if (transmitter_status==0)            //when not xmitting, constantly (re)sets idle voltage. If xmitting is on
-		pctx->_txSched.voltage_at_idle=pctx->_txSched.voltage;
-		if ((transmitter_status==1)&&(schedule[current_minute]==1))   //if transmitting, AND if doing the 1st packet, (re)sets XMIT voltage. so the voltage that DEXT sends will have been recorded right at the end of the 1st packet
-		pctx->_txSched.voltage_at_xmit=pctx->_txSched.voltage;
-   
    return 0;
 }
 //******************************************************************************************************************************
