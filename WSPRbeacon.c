@@ -234,7 +234,7 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 			}
 		if(is_GPS_active==0) //check if GPS lock was lost while waiting to start Xmit
 		{
-																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	printf("GPS lock lost while waiting to xmit! returning to state 30!");
+																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	printf("* * * ** GPS lock lost while waiting to xmit! returning to state 30!");
 			SEQ=30;
 		}
 	}
