@@ -745,19 +745,12 @@ void I2C_init(void)
 	
 	sleep_ms(5);
 	
-	// both use i2c0, just pin numbers change
-	/*i2c_init(i2c0, 100 * 1000); 			 //init at 100kHz
+
+	i2c_init(i2c0, 100 * 1000); 			 //init at 100kHz
     gpio_set_function(0, GPIO_FUNC_I2C);     //i2c1 on gpio 2 and 3
     gpio_set_function(1, GPIO_FUNC_I2C);
     gpio_pull_up(0);
-    gpio_pull_up(1);*/
-	
-									//for kazu board only!!! use above on JAWBONE!!!  wuz
-	i2c_init(i2c0, 100 * 1000); 			 //init at 100kHz
-    gpio_set_function(12, GPIO_FUNC_I2C);     //i2c1 on gpio 2 and 3
-    gpio_set_function(13, GPIO_FUNC_I2C);
-    gpio_pull_up(12);
-    gpio_pull_up(13);
+    gpio_pull_up(1);
 	
 /*   //scanning bus example
   printf("Scanning I2C bus...\n");
