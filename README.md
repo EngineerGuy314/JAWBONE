@@ -5,6 +5,10 @@ Custom PCB and software for a RP2040 based WSPR Beacon intended for tracking hig
 
 This is an evolution of my  [pico-WSPRer](https://github.com/EngineerGuy314/pico-WSPRer) project. It is very similar except JAWBONE uses the MS5351 clock generator chip instead of abusing the RP2040's internal PLL oscillator. Also, this project is only intended to be used with a custom PCB, there is no longer an option to assemble it from a RaspberryPi Pico and external components (it is probably still possible, but not tested or documented). For now please continue to reference the [pico-WSPRer Wiki](https://github.com/EngineerGuy314/pico-WSPRer/wiki/pico%E2%80%90WSPRer-(aka-Cheapest-Tracker-in-the-World%E2%84%A2)) because most of the information there is still relevant to JAWBONE.
 
+![jawbone](https://github.com/user-attachments/assets/c03d8802-0c34-4173-b809-a5d2d00af5f1)
+
+fully assemble tracker weights only 2.2 gram
+
 ![preview](https://github.com/user-attachments/assets/0b28e349-c252-4de8-9e00-88cb8f8306e2)
 
 I owe great thanks and acknowledgement to Roman Piksaykin (https://github.com/RPiks/) for the original program that was the starting point for pico-WSPRer. Much of his code still lives on inside JAWBONE and I have tried to maintain his copyright information in all relevant files.
