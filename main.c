@@ -1087,7 +1087,7 @@ void go_to_sleep()
 			*/
 }
 ////////////////////////////////////
-void process_chan_num()   //need to update for bands other than 20M
+void process_chan_num()   //need to update for bands other than 20M and 10M
 {
 	if ( (atoi(_U4B_chan)>=0) && (atoi(_U4B_chan)<600)) 
 	{
@@ -1104,7 +1104,11 @@ void process_chan_num()   //need to update for bands other than 20M
 
 		int txSlot = atoi(_U4B_chan) % 5;
 		
-		_start_minute[0] = '0' + (2*((txSlot+14)%5));
+
+		_start_minute[0] = '0' + (2*((txSlot+14)%5)); //default starting minute for 20M
+
+		if (_band[0]=='L')  //10 Meter
+		_start_minute[0] = '0' + (2*((txSlot+12)%5)); 
 
 	}
 }
