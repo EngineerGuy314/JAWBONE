@@ -1,0 +1,38 @@
+stateDiagram-v2
+    [*] --> SEQ10 : Start / Initial
+
+    SEQ10 : SEQ=10<br/>Enable GPS, VFO off<br/>Reset message_count=0<br/>Start GPS search timer
+    SEQ10 --> SEQ20 : Always
+
+    SEQ20 : SEQ=20<br/>Check GPS comms<br/>LED=0 (no comms)
+    SEQ20 --> SEQ30 : message_count > 1
+    SEQ20 --> SEQ20 : Else (loop)
+
+    SEQ30 : SEQ=30<br/>Wait for GPS lock<br/>LED=1 (comms est., no lock)
+    SEQ30 --> SEQ40 : is_GPS_active (3D fix)
+    SEQ30 --> SEQ30 : Else (loop)
+
+    SEQ40 : SEQ=40<br/>Record position<br/>Snapshot locator, altitude
+    SEQ40 --> SEQ50 : Always
+
+    SEQ50 : SEQ=50<br/>Check tx schedule
+    SEQ50 --> SEQ60 : schedule[min] > 0 AND sec==0
+    SEQ50 --> SEQ40 : Not time yet (loop back)
+    SEQ50 --> SEQ30 : GPS lock lost
+
+    SEQ60 : SEQ=60<br/>Prep for tx<br/>GPS off, VFO on<br/>Save idle voltage<br/>LED=3 (tx progress)
+    SEQ60 --> SEQ70 : Always
+
+    SEQ70 : SEQ=70<br/>Create & send packet<br/>Type from schedule[min]<br/>Wait 1s, transmit
+    SEQ70 --> SEQ80 : Always<br/>min +=2 %10
+
+    SEQ80 : SEQ=80<br/>Wait for packet end
+    SEQ80 --> SEQ90 : ix_output==162 AND time >120s
+    SEQ80 --> SEQ80 : Else (loop)
+
+    SEQ90 : SEQ=90<br/>Check next slot
+    SEQ90 --> SEQ70 : schedule[min] > 0 (back-to-back tx)
+    SEQ90 --> SEQ10 : No packet (save tx voltage, re-enable GPS)
+
+    note right of SEQ50 : Loops back to 40 for position updates<br/>until tx time or lock loss
+    note right of SEQ90 : Cycle restarts with GPS
