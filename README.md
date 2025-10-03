@@ -15,10 +15,17 @@ I owe great thanks and acknowledgement to Roman Piksaykin (https://github.com/RP
 
 
 Rp2040 main clock runs at only 18Mhz.
+
+**Power**
+
 Current consumption (3.3V):
 idle: 10mA
 w/GPS: 34mA
 w/MS5351: 56mA  (transmitting double ended into 70ohm)
+
+The pin marked "5V" feeds into 3.3V ldo regulator, which feeds VBUS. VBUS is boosted if needed by a MCP1640T.
+
+So "5V" is a universal power input, tolerant of anything between 2v and 7v. But the VBUS input can only be fed by sources between 2v and 3.3v. 
 
 **telemetry changes Oct 2025:** (assumes config 59-)
 
