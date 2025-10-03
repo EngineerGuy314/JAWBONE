@@ -21,15 +21,21 @@ w/GPS: 34mA
 w/MS5351: 56mA  (transmitting double ended into 70ohm)
 
 **telemetry changes Oct 2025:**
+
 DEXT type 5 is now (traquito format):
 
 
+
 DEXT type 9 is now (traquito format):
-'''{ "name": "since_boot",      "unit": "mins",  "lowValue":   0, "highValue": 6000,    "stepSize": 1 },
+'''
+{ "name": "since_boot",      "unit": "mins",  "lowValue":   0, "highValue": 6000,    "stepSize": 1 },
 { "name": "GPS_aquisition","unit": "secs","lowValue":   0, "highValue": 200,    "stepSize": 1 },
-{ "name": "Vbus",   "unit": "V_hundreths",  "lowValue":   0, "highValue": 500,    "stepSize": 1 },'''
+{ "name": "Vbus",   "unit": "V_hundreths",  "lowValue":   0, "highValue": 500,    "stepSize": 1 },
+'''
 TWITS Format:
-'''code goes here''
+'''
+code goes here
+'''
 
 
 
