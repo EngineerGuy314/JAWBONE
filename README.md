@@ -20,24 +20,41 @@ idle: 10mA
 w/GPS: 34mA
 w/MS5351: 56mA  (transmitting double ended into 70ohm)
 
-**telemetry changes Oct 2025:**
+**telemetry changes Oct 2025:** (assumes config 59-)
 
-DEXT type 5 is now (traquito format):
+DEXT type 5 in traquito format (both times roll over):
+```
+{ "name": "grid_char7",   "unit": "digit",   "lowValue":   0,    "highValue": 9,    "stepSize": 1   },
+{ "name": "grid_char8",   "unit": "digit",    "lowValue":   0,    "highValue":    9,    "stepSize":  1 },
+{ "name": "grid_char9",   "unit": "alpha",      "lowValue":   0,    "highValue":   23,    "stepSize":  1 },
+{ "name": "grid_char10",  "unit": "alpha",      "lowValue":   0,  "highValue":     23,  "stepSize":  1 },
+{ "name": "since_boot",   "unit": "minutes10",    "lowValue":   0,  "highValue":     100,  "stepSize":  1 },
+{ "name": "gps_aquisition",  "unit": "seconds10",  "lowValue":   0,  "highValue":     100,  "stepSize":  1 },
+```
+type 5 TWITS Format:
+```
+#slot 3 (DExt type 5)
+grid7,Count,0,9,1,3
+grid8,Count,0,9,1,3
+grid8,Count,0,23,1,3
+grid10,Count,0,23,1,3
+sinceBoot10,Count,0,100,1,3
+GPS_aqui_10,Count,0,100,1,3
+```
 
-
-
-DEXT type 9 is now (traquito format):
+DEXT type 9 in traquito format (gps time is CLAMPED):
 ```
 { "name": "since_boot",      "unit": "mins",  "lowValue":   0, "highValue": 6000,    "stepSize": 1 },
 { "name": "GPS_aquisition","unit": "secs","lowValue":   0, "highValue": 200,    "stepSize": 1 },
 { "name": "Vbus",   "unit": "V_hundreths",  "lowValue":   0, "highValue": 500,    "stepSize": 1 },
 ```
-TWITS Format:
+type 9 TWITS Format:
 ```
-code goes here
+#slot 4 (DExt type 0)
+mins_since_boot,Count,0,6000,1,4
+GPS_aqu_secs,Count,0,200,1,4
+vbus,Count,0,500,1,4
 ```
-
-
 
 
 **random notes:**
