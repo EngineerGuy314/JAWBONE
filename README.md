@@ -27,7 +27,7 @@ The pin marked "5V" feeds into 3.3V ldo regulator, which feeds VBUS. VBUS is boo
 
 So "5V" is a universal power input, tolerant of anything between 2v and 7v. But the VBUS input can only be fed by sources between 2v and 3.3v. 
 
-**telemetry changes Oct 2025:** (assumes config 59-)
+**telemetry changes Oct 2025:** (assumes config 58-)
 
 DEXT type 5 in traquito format (both times roll over):
 ```
@@ -49,15 +49,15 @@ sinceBoot10,Count,0,100,1,3
 GPS_aqui_10,Count,0,100,1,3
 ```
 
-DEXT type 9 in traquito format (gps time is CLAMPED):
+DEXT type 8 in traquito format (gps time is CLAMPED):
 ```
 { "name": "since_boot",      "unit": "mins",  "lowValue":   0, "highValue": 6000,    "stepSize": 1 },
 { "name": "GPS_aquisition","unit": "secs","lowValue":   0, "highValue": 200,    "stepSize": 1 },
 { "name": "Vbus",   "unit": "V_hundreths",  "lowValue":   0, "highValue": 500,    "stepSize": 1 },
 ```
-type 9 TWITS Format:
+type 8 TWITS Format:
 ```
-#slot 4 (DExt type 0)
+#slot 4 (DExt type 8)
 mins_since_boot,Count,0,6000,1,4
 GPS_aqu_secs,Count,0,200,1,4
 vbus,Count,0,500,1,4

@@ -268,7 +268,7 @@ void process_TELEN_data(void)
 							pWSPR->telem_vals_and_ranges[i][2 ]=(v_and_r){pWSPR->grid9 -'A',24}; 
 							pWSPR->telem_vals_and_ranges[i][3 ]=(v_and_r){pWSPR->grid10-'A',24}; 
 							pWSPR->telem_vals_and_ranges[i][4]=(v_and_r){(int)round(pWSPR->_txSched.minutes_since_boot/10.0),101}; 
-							pWSPR->telem_vals_and_ranges[i][5]=(v_and_r){(int)round(pWSPR->_txSched.seconds_for_lock/2.0),101}; 			
+							pWSPR->telem_vals_and_ranges[i][5]=(v_and_r){(int)round(pWSPR->_txSched.seconds_for_lock/10.0),101}; 			
 							break;
 							
 				case '6': 			//idle and xmit volts, some low res times            
@@ -290,9 +290,10 @@ void process_TELEN_data(void)
 							break;
 
 				case '8': 			//some things   (58-)
-							pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){pWSPR->_txSched.max_sats_seen_today,61}; 
-							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){(uint32_t)pWSPR->_txSched.seconds_for_lock,1801}; 
-							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){round((float)adc_read() * conversionFactor * 3.0f * 10),901}; 									
+							pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){(int)round(pWSPR->_txSched.minutes_since_boot),6001}; 
+							if (pWSPR->_txSched.seconds_for_lock>200) pWSPR->_txSched.seconds_for_lock=200; //clamp to max
+							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){(uint32_t)pWSPR->_txSched.seconds_for_lock,201}; 
+							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){round((float)adc_read() * conversionFactor * 3.0f * 10),501}; 									
 			}	
 		}
 }
@@ -1152,7 +1153,7 @@ void process_chan_num()   //need to update for bands other than 20M and 10M
 { "name": "DALLAS2",      "unit": "Count",  "lowValue":   0, "highValue": 120,    "stepSize": 1 },
 { "name": "Dallas2_sign",      "unit": "Count",  "lowValue":   0, "highValue": 1,    "stepSize": 1 },
 
-3:
+4:
 { "name": "DALLAS3",      "unit": "Count",  "lowValue":   0, "highValue": 120,    "stepSize": 1 },
 { "name": "Dallas3_sign",      "unit": "Count",  "lowValue":   0, "highValue": 1,    "stepSize": 1 },
 { "name": "DALLAS4",      "unit": "Count",  "lowValue":   0, "highValue": 120,    "stepSize": 1 },
@@ -1164,7 +1165,15 @@ void process_chan_num()   //need to update for bands other than 20M and 10M
 { "name": "grid_char9",   "unit": "alpha",      "lowValue":   0,    "highValue":   23,    "stepSize":  1 },
 { "name": "grid_char10",  "unit": "alpha",      "lowValue":   0,  "highValue":     23,  "stepSize":  1 },
 { "name": "since_boot",   "unit": "minutes10",    "lowValue":   0,  "highValue":     100,  "stepSize":  1 },
-{ "name": "time_for_lock_2s",  "unit": "double_secs",  "lowValue":   0,  "highValue":     100,  "stepSize":  1 },
+{ "name": "gps_aquisition",  "unit": "seconds10",  "lowValue":   0,  "highValue":     100,  "stepSize":  1 },
+:5 (TWITS)
+#slot 3 (DExt type 5)
+grid7,Count,0,9,1,3
+grid8,Count,0,9,1,3
+grid8,Count,0,23,1,3
+grid10,Count,0,23,1,3
+sinceBoot10,Count,0,100,1,3
+GPS_aqui_10,Count,0,100,1,3
 
 
 7:
@@ -1172,9 +1181,16 @@ void process_chan_num()   //need to update for bands other than 20M and 10M
 { "name": "since_loss",      "unit": "secs",    "lowValue":   0,    "highValue":    3600,    "stepSize":  1   },
 { "name": "since_boot_tens",      "unit": "mins",    "lowValue":   0,    "highValue":    36,    "stepSize":  1   },
 
+
 8:
-{ "name": "most_sats_seen_today",      "unit": "Count",  "lowValue":   0, "highValue": 60,    "stepSize": 1 },
-{ "name": "seconds_for_1st_aquisition","unit": "Count","lowValue":   0, "highValue": 1800,    "stepSize": 1 },
-{ "name": "Vbus",   "unit": "mV",  "lowValue":   0, "highValue": 900,    "stepSize": 1 },
+{ "name": "since_boot",      "unit": "mins",  "lowValue":   0, "highValue": 6000,    "stepSize": 1 },
+{ "name": "GPS_aquisition","unit": "secs","lowValue":   0, "highValue": 200,    "stepSize": 1 },
+{ "name": "Vbus",   "unit": "V_hundreths",  "lowValue":   0, "highValue": 500,    "stepSize": 1 },
+8: (TWITS)
+#slot 4 (DExt type 0)
+mins_since_boot,Count,0,6000,1,4
+GPS_aqu_secs,Count,0,200,1,4
+vbus,Count,0,500,1,4
+
 
  */
