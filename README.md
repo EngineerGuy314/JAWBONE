@@ -1,5 +1,5 @@
 # JAWBONE
-Just Another WSPR Beacon Of Noisy Electronics
+**JAWBONE = Just Another WSPR Beacon Of Noisy Electronics**
 
 Custom PCB and software for a RP2040 based WSPR Beacon intended for tracking high altitude superpressure balloons (aka Pico Balloons).
 
