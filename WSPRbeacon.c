@@ -32,6 +32,7 @@ static absolute_time_t start_time_of_GPS_search;
 static absolute_time_t time_of_last_serial_packet;
 static int current_minute;
 static int current_second;
+static int first_broadcast_of_the_day;
 static int oneshots[10];
 static int schedule[10];  //array index is minute, (odd minutes are unused) value is -1 for NONE or 1-4 for U4B 1st msg,U4B 2nd msg,Zachtek 1st, Zachtek 2nd, and #5 for extended TELEN
 static int schedule_band[10];  //holds the band number (10, 20, 17, etc...) that will be used for that timeslot
@@ -129,7 +130,8 @@ WSPRbeaconContext *WSPRbeaconInit(const char *pcallsign, const char *pgridsquare
 	for (int i=0;i < 10;i++) schedule[i]=-1;
 	p->_txSched.minutes_since_boot=0;
 	p->_txSched.max_sats_seen_today=0;
-
+	first_broadcast_of_the_day=1;
+	
 	/* Following code sets packet types for each timeslot. 1:U4B 1st msg, 2: U4B 2nd msg, 3: WSPR1 or Zachtek 1st, 4:Zachtek 2nd,  5:extended TELEN #1 6:extended TELEN #2  */	
 	if (id13==253)   //if U4B protocol disabled ('--' enterred for Id13),  we will ONLY do Type 1 [and Type3 (zachtek)] at the specified minute
 	{		
@@ -226,17 +228,21 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 			{
 				SEQ=60;											//if time to start a packet
 																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	printf("About to start packet. current mind: %d current sec %d slot time at this minute: %d time since initial GPS lock: %.1f secs\n",current_minute,current_second,schedule[current_minute],absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0);
-				
+	
+			if ((first_broadcast_of_the_day==1)&&(schedule[current_minute]!=1))
+				SEQ=40;   //if its first xmission of the day, dont start broadcasting until we can start with a regulat type 1 packet, otherwise the TELEN wouldnt be decoded anyway
+	
 			}
 			else
 			{
 				SEQ=40;        //if not time yet, jump back to 40 and keep track of changing position
 			}
-		if(is_GPS_active==0) //check if GPS lock was lost while waiting to start Xmit
+		/* removed oct 2025. if gps lock was received, but then lost, screw it and transmit anyway.
+		if(is_GPS_active==0) //check if GPS lock was lost while waiting to start Xmit. if GPS lost go back to waiting
 		{
 																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	printf("* * * ** GPS lock lost while waiting to xmit! returning to state 30!");
 			SEQ=30;
-		}
+		}*/
 	}
 
 
@@ -255,7 +261,6 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 			pctx->_pTX->_u32_dialfreqhz = XMIT_FREQUENCY;
 			transmitter_status=1;
 			WSPRbeaconCreatePacket(pctx, schedule[current_minute] ); //the schedule determines packet type (1-4 for U4B 1st msg,U4B 2nd msg,Zachtek 1st, Zachtek 2nd)
-			sleep_ms(1000); //technically your supposed to wait 1 second after minute to begin TX
 			WSPRbeaconSendPacket(pctx); 
 			current_minute=(current_minute+2)%10;   //increment in case we come back around here without re-enabling gps
 			SEQ=80;		
@@ -299,6 +304,8 @@ int WSPRbeaconCreatePacket(WSPRbeaconContext *pctx,int packet_type)  //1-6.  1: 
 
    if (packet_type==1)   //U4B first msg
    {
+	first_broadcast_of_the_day=0;
+
 	pctx->_u8_txpower =10;               //hardcoded at 10dbM when doing u4b MSG 1
 				if (pctx->_txSched.verbosity>=3){ printf("creating U4B packet 1\n");printf("location for Xmit: %s%c%c%c%c%c%c lat/lon: %lld %lld\n", _4_char_version_of_locator,grid5,grid6,grid7,grid8,grid9,grid10,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k);}				
 	wspr_encode(pctx->_pu8_callsign, _4_char_version_of_locator, pctx->_u8_txpower, pctx->_pu8_outbuf, pctx->_txSched.verbosity);   // look in utility.c for wspr_encode

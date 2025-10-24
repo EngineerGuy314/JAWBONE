@@ -291,8 +291,9 @@ void process_TELEN_data(void)
 
 				case '8': 			//some things   (58-)
 							pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){(int)round(pWSPR->_txSched.minutes_since_boot),6001}; 
-							if (pWSPR->_txSched.seconds_for_lock>200) pWSPR->_txSched.seconds_for_lock=200; //clamp to max
-							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){(uint32_t)pWSPR->_txSched.seconds_for_lock,201}; 
+							uint32_t clamped_value=pWSPR->_txSched.seconds_for_lock;
+							if (pWSPR->_txSched.seconds_for_lock>200) clamped_value=200; //clamp to max
+							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){clamped_value,201}; 
 							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){round((float)adc_read() * conversionFactor * 3.0f * 10),501}; 									
 			}	
 		}
