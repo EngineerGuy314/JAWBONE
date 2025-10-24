@@ -270,7 +270,7 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 	if (SEQ==80)       //wait for end of this packet being transmitted
 	{
 
-		if ((pctx->_pTX->_ix_output==162)&&(absolute_time_diff_us(start_time, get_absolute_time()) > 119000000ULL))  //wait for last bit to be sent, and 120 secs since start
+		if ((pctx->_pTX->_ix_output==162)&&(absolute_time_diff_us(start_time, get_absolute_time()) > 120000000ULL))  //wait for last bit to be sent, and 120 secs since start
 		{
 			SEQ=90;
 																			if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2)) printf("end of pak detected time since initial GPS lock: %.1f secs\n",absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0);			
