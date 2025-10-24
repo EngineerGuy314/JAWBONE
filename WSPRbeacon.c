@@ -283,7 +283,8 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 		
 		if(schedule[current_minute]>0)	//if has a packet, do another packet immediately without re-enabling GPS
 			{
-				start_time = get_absolute_time();     //reset "start_time" so we know when this packet ends
+				//start_time = get_absolute_time();     //reset "start_time" so we know when this packet ends
+				start_time = delayed_by_us(start_time, -120000000LL); //reset "start_time" so we know when this packet ends
 				SEQ=70;
 																				if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))printf("going to do aother pak immediately\n");
 			}	
@@ -291,6 +292,7 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 		{
 				pctx->_txSched.voltage_at_xmit=pctx->_txSched.voltage; //done xmitting so save voltage during xmit
 				SEQ=10;   //turn GPS back on
+				first_broadcast_of_the_day=1; //doing this to make sure if it gets no gps lock before next type1 it will wait for the next time
 																				if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))printf("no pak next, turning GPS back on. time since initial GPS lock: %.1f secs\n",absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0);			
 		}
 
