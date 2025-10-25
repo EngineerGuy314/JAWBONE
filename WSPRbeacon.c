@@ -284,7 +284,7 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 		if(schedule[current_minute]>0)	//if has a packet, do another packet immediately without re-enabling GPS
 			{
 				//start_time = get_absolute_time();     //reset "start_time" so we know when this packet ends
-				start_time = delayed_by_us(start_time, -120000000LL); //reset "start_time" so we know when this packet ends
+				start_time = delayed_by_us(start_time, 120000000LL); //reset "start_time" so we know when this packet ends
 				SEQ=70;
 																				if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))printf("going to do aother pak immediately\n");
 			}	
