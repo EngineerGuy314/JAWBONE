@@ -5,6 +5,8 @@ Custom PCB and software for a RP2040 based WSPR Beacon intended for tracking hig
 
 This is an evolution of my  [pico-WSPRer](https://github.com/EngineerGuy314/pico-WSPRer) project. It is very similar except JAWBONE uses the MS5351 clock generator chip instead of abusing the RP2040's internal PLL oscillator. Also, this project is only intended to be used with a custom PCB, there is no longer an option to assemble it from a RaspberryPi Pico and external components (it is probably still possible, but not tested or documented). For now please continue to reference the [pico-WSPRer Wiki](https://github.com/EngineerGuy314/pico-WSPRer/wiki/pico%E2%80%90WSPRer-(aka-Cheapest-Tracker-in-the-World%E2%84%A2)) because most of the information there is still relevant to JAWBONE.
 
+Pre-compiled uf2 file is in the /build folder. EasyEda project file and gerbers, bom, PnP etc in the /PCB folder.
+
 ![jawbone](https://github.com/user-attachments/assets/c03d8802-0c34-4173-b809-a5d2d00af5f1)
 
 fully assemble tracker weights only 2.2 gram
@@ -16,7 +18,7 @@ ready for first test flight! Succesfull launch October 5th, 2025. nearly complet
 [2nd flight](https://traquito.github.io/search/spots/dashboard/?band=20m&channel=522&callsign=KC3LBR&dtGte=2025-10-26&slot3MsgDefUserDefined=%7B+%22name%22%3A+%22grid_char7%22%2C+++%22unit%22%3A+%22digit%22%2C+++%22lowValue%22%3A+++0%2C++++%22highValue%22%3A+9%2C++++%22stepSize%22%3A+1+++%7D%2C%0A%7B+%22name%22%3A+%22grid_char8%22%2C+++%22unit%22%3A+%22digit%22%2C++++%22lowValue%22%3A+++0%2C++++%22highValue%22%3A++++9%2C++++%22stepSize%22%3A++1+%7D%2C%0A%7B+%22name%22%3A+%22grid_char9%22%2C+++%22unit%22%3A+%22alpha%22%2C++++++%22lowValue%22%3A+++0%2C++++%22highValue%22%3A+++23%2C++++%22stepSize%22%3A++1+%7D%2C%0A%7B+%22name%22%3A+%22grid_char10%22%2C++%22unit%22%3A+%22alpha%22%2C++++++%22lowValue%22%3A+++0%2C++%22highValue%22%3A+++++23%2C++%22stepSize%22%3A++1+%7D%2C%0A%7B+%22name%22%3A+%22since_boot%22%2C+++%22unit%22%3A+%22minutes10%22%2C++++%22lowValue%22%3A+++0%2C++%22highValue%22%3A+++++100%2C++%22stepSize%22%3A++1+%7D%2C%0A%7B+%22name%22%3A+%22gps_aquisition%22%2C++%22unit%22%3A+%22seconds10%22%2C++%22lowValue%22%3A+++0%2C++%22highValue%22%3A+++++100%2C++%22stepSize%22%3A++1+%7D%2C&slot4MsgDefUserDefined=%7B+%22name%22%3A+%22since_boot%22%2C++++++%22unit%22%3A+%22mins%22%2C++%22lowValue%22%3A+++0%2C+%22highValue%22%3A+6000%2C++++%22stepSize%22%3A+1+%7D%2C%0A%7B+%22name%22%3A+%22GPS_aquisition%22%2C%22unit%22%3A+%22secs%22%2C%22lowValue%22%3A+++0%2C+%22highValue%22%3A+200%2C++++%22stepSize%22%3A+1+%7D%2C%0A%7B+%22name%22%3A+%22Vbus%22%2C+++%22unit%22%3A+%22V_hundreths%22%2C++%22lowValue%22%3A+++0%2C+%22highValue%22%3A+500%2C++++%22stepSize%22%3A+1+%7D%2C) has completed its first lap and is still going (used only a single horizontal 4 cell panel, which got skewed on takeoff, so minimum solar angle is a horrible 25 degrees, so during these short days it often never reports in).
 
 
-The small board in front has 3 LM66100 "ideal diodes" for isolating the solar panels. On board MCP1640T needs only ~2.2 volts to run the tracker.
+The small board in front has 3 LM66100 "ideal diodes" for isolating the solar panels. On board MCP1640T needs only ~2.2 volts to run the tracker. Its EasyEDA files are also in the /PCB folder.
 
 I owe great thanks and acknowledgement to Roman Piksaykin (https://github.com/RPiks/) for the original program that was the starting point for pico-WSPRer. Much of his code still lives on inside JAWBONE and I have tried to maintain his copyright information in all relevant files.
 
