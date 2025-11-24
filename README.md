@@ -10,7 +10,8 @@ This is an evolution of my  [pico-WSPRer](https://github.com/EngineerGuy314/pico
 
 Pre-compiled uf2 file is in the /build folder. EasyEda project file and gerbers, bom, PnP etc in the /PCB folder.
 
-![jawbone](https://github.com/user-attachments/assets/c03d8802-0c34-4173-b809-a5d2d00af5f1)
+![jawbone2_sm](https://github.com/user-attachments/assets/06095d34-4753-4ac4-a2d6-6d9f3f5e12ee)
+
 
 fully assemble tracker weights only 2.2 gram
 
