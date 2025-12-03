@@ -13,5 +13,5 @@ Pre-compiled uf2 file is in the /build folder. EasyEda project file and gerbers,
 ![jawbone2_sm](https://github.com/user-attachments/assets/06095d34-4753-4ac4-a2d6-6d9f3f5e12ee)
 
 
-fully assemble tracker weights only 2.2 gram!
+fully assemble tracker weights only 2.2 gram! This is an early rev without USB connector. Current version has a breakaway USB-C connector for config and programming.
 
