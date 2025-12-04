@@ -71,13 +71,18 @@ int main()
 {
 	
 	StampPrintf("\n");DoLogPrint(); // needed asap to wake up the USB stdio port (because StampPrintf includes stdio_init_all();). why though?
-	for (int i=0;i < 20;i++) {printf("*");sleep_ms(100);}			
+	for (int i=0;i < 5;i++) {printf("*");sleep_ms(100);}			
  
-	gpio_init(LED_PIN);	gpio_set_dir(LED_PIN, GPIO_OUT); //initialize LED output
-	for (int i=0;i < 20;i++)     //do some blinky on startup, allows time for power supply to stabilize before GPS unit enabled
-		{gpio_put(LED_PIN, 1); sleep_ms(100);gpio_put(LED_PIN, 0);sleep_ms(100);}
 	read_NVRAM();				//reads values of _callsign,  _verbosity etc from NVRAM. MUST READ THESE *BEFORE* InitPicoPins
-	if (check_data_validity()==-1)  //if data was bad, breathe LED for 10 seconds and reboot. or if user presses a key enter setup
+	gpio_init(LED_PIN);	gpio_set_dir(LED_PIN, GPIO_OUT); //initialize LED output
+	for (int i=0;i < 40;i++)     //do some blinky on startup, allows time for power supply to stabilize before GPS unit enabled, give user chance to interrupt boot
+		{gpio_put(LED_PIN, 1); printf(" %d",(60-i));		
+		 if (getchar_timeout_us(0)>0)   //looks for input on USB serial port only. Note: getchar_timeout_us(0) returns a -2 (as of sdk 2) if no keypress. Must do this check BEFORE setting Clock Speed in Case you bricked it
+				{RfGen._pGPStime->user_setup_menu_active=1;	user_interface();}		
+					sleep_ms(100);gpio_put(LED_PIN, 0);sleep_ms(100);}
+
+
+	if (check_data_validity()==-1)  //if data was bad, breathe LED for 15 seconds and reboot. or if user presses a key enter setup
 		{
 			printf("\nBAD values in NVRAM detected! will reboot in 10 seconds... press any key to enter user-setup menu..\n");
 			fader=0;fade_counter=0;
@@ -88,7 +93,7 @@ int main()
 								 gpio_put(LED_PIN, 1); 
 									else
 								 gpio_put(LED_PIN, 0);	
-							 if (fader>500000) {fader=0;fade_counter+=1;if (fade_counter>10) {watchdog_enable(100, 1);for(;;)	{} }}  //after ~10 secs force a reboot														
+							 if (fader>500000) {fader=0;fade_counter+=1;if (fade_counter>15) {watchdog_enable(100, 1);for(;;)	{} }}  //after ~10 secs force a reboot														
 						}	
 				RfGen._pGPStime->user_setup_menu_active=1;	//if we get here, they pressed a button (to interrupt the "breathing" that indicates bad nvram)
 				user_interface();  
@@ -371,12 +376,9 @@ printf("\n\n\n\n\n\n\n\n\n\n\n\n");
 printf("================================================================================\n\n");printf(UNDERLINE_ON);
 printf("JAWBONE (Just Another Wspr Beacon Of Noisy Electronics) by KC3LBR,  version: %s %s\n\n",__DATE__ ,__TIME__);printf(UNDERLINE_OFF);printf(NORMAL); 
 printf("Instructions and source: https://github.com/EngineerGuy314/JAWBONE\n");
-printf("Originally forked from : https://github.com/RPiks/pico-WSPR-tx\n");
-printf("Additional functions, fixes and documention by https://github.com/serych\n");
 printf("Consult https://traquito.github.io/channelmap/ to find and reserve an open channel \n\n");printf(BRIGHT);printf(UNDERLINE_ON);
 printf("BAND ENUMERATION:\n");printf(UNDERLINE_OFF);
-printf("(default is 'H' 20 Meter) F:40,G:30,H:20,I:17,J:15,K:12,L:10,M:6 \n");
-printf("---WARNING!--- For bands other than H (20M)  you may need to use a different U4B channel to get the starting minute you want!!\n\n");
+printf("(default is 'H' 20 Meter) F:40,G:30,H:20,I:17,J:15,K:12,L:10,M:6 \n\n");
 
 
 
@@ -608,7 +610,7 @@ strcpy(_Klock_speed,"18");
 _battery_mode[0]='0';
 _Datalog_mode[0]='0';
 _band_hop[0]='0'; 
-
+_suffix[0]='-';  //removed type-3 (zachtek mode) Dec 202
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -655,7 +657,7 @@ printf(UNDERLINE_ON);printf(BRIGHT);
 printf("\n\nCurrent values:\n");printf(UNDERLINE_OFF);printf(NORMAL);
 
 printf("\n\tCallsign:%s\n\t",_callsign);
-printf("Suffix (zachtek):%s   (please set to '-' if unused)\n\t",_suffix);
+//printf("Suffix (zachtek):%s   (please set to '-' if unused)\n\t",_suffix);
 printf("U4b channel:%s",_U4B_chan);
 printf(" (Id13:%s",_id13);
 printf(" Start Minute:%s",_start_minute);
@@ -664,7 +666,7 @@ printf("Band:%s (%d Hz)\n\t",_band,freqs[band_as_int]);
 printf("Verbosity:%s\n\t",_verbosity);
 printf("Optional debug:%s\n\t",_Optional_Debug);
 //printf("custom Pcb IO mappings:%s\n\t",_custom_PCB);
-printf("Telemetry config:%s   (please set to '---' if unused)\n\t",_DEXT_config);
+printf("Telemetry config:%s   (please set to '---' if unused)\n",_DEXT_config);
 //printf("Klock speed (temp) :%sMhz  \n",_Klock_speed);
 /*printf("Datalog mode:%s\n\t",_Datalog_mode);
 printf("Battery (low power) mode:%s\n\t",_battery_mode);
@@ -674,7 +676,7 @@ printf("secret band Hopping mode:%s\n\n",_band_hop);*/
 printf("VALID commands: ");printf(UNDERLINE_OFF);printf(NORMAL);
 
 printf("\n\n\tX: eXit configuraiton and reboot\n\tC: change Callsign (6 char max)\n\t");
-printf("S: change Suffix ( for WSPR3/Zachtek) use '-' to disable WSPR3\n\t");
+//printf("S: change Suffix ( for WSPR3/Zachtek) use '-' to disable WSPR3\n\t");
 printf("U: change U4b channel # (0-599)\n\t");
 printf("B: change Band (F-M) default 20M is H\n\t");
 /*printf("I: change Id13 (two alpha numeric chars, ie Q8) use '--' to disable U4B\n\t");
@@ -682,7 +684,7 @@ printf("M: change starting Minute (0,2,4,6,8)\n\tL: Lane (1,2,3,4) corresponding
 printf("V: Verbosity level (0 for no messages, 9 for too many) \n\t");
 printf("O: Optional debug functions (bitmapped 0 - 255) \n\t");
 //printf("P: custom Pcb mode IO mappings (0,1)\n\t");
-printf("T: Telemetry (dexT) config\n\t");
+printf("T: Telemetry (extended) config\n\t");
 //printf("K: Klock speed  \n\t");
 //printf("D: Datalog mode (0,1,(W)ipe memory, (D)ump memory) see wiki\n\t");
 //printf("B: Battery (low power) mode \n\t");
