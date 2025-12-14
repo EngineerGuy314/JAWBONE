@@ -81,7 +81,7 @@ int main()
 				{RfGen._pGPStime->user_setup_menu_active=1;	user_interface();}		
 					sleep_ms(100);gpio_put(LED_PIN, 0);sleep_ms(100);}
 
-
+	read_NVRAM();  //redundant, but doing it here to display nvram on screen 
 	if (check_data_validity()==-1)  //if data was bad, breathe LED for 15 seconds and reboot. or if user presses a key enter setup
 		{
 			printf("\nBAD values in NVRAM detected! will reboot in 10 seconds... press any key to enter user-setup menu..\n");

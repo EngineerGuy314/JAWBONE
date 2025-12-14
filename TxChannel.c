@@ -16,8 +16,10 @@ static void RAM (TxChannelISR)(void)
     if(n2send)
     {
 			// sets frequency after doing modulation with the value in "byte"
-			si5351aSetFrequency((uint64_t)((uint64_t)(((float)spTX->_u32_dialfreqhz + (float)byte * 12000.f / 8192.f)*100)));			
-    }
+			//si5351aSetFrequency((uint64_t)((uint64_t)(((float)spTX->_u32_dialfreqhz + (float)byte * 12000.f / 8192.f)*100)));			that was stupid...
+    		si5351aSetFrequency((uint64_t)spTX->_u32_dialfreqhz + (uint64_t)(100*byte * 12000.f / 8192.f));			
+    
+	}
 
     spTX->_tm_future_call += spTX->_bit_period_us; //next alarm calculation
 
