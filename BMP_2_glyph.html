@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>QRSS Glyph Waterfall Simulator</title>
+<style>
+    body {
+        font-family: monospace;
+        background: #111;
+        color: #eee;
+        padding: 20px;
+    }
+    input, button {
+        font-family: monospace;
+        font-size: 14px;
+        margin: 5px 0;
+    }
+    textarea {
+        width: 100%;
+        height: 220px;
+        margin-top: 10px;
+        background: #000;
+        color: #0f0;
+        border: 1px solid #555;
+        padding: 10px;
+        white-space: pre;
+    }
+    canvas {
+        margin-top: 10px;
+        border: 1px solid #555;
+        image-rendering: pixelated;
+    }
+</style>
+</head>
+<body>
+
+<h2>BMP → QRSS Glyph Tool (with Waterfall)</h2>
+
+<input type="file" id="fileInput" accept=".bmp"><br>
+
+<label>X dimension (frequency bins):</label><br>
+<input type="number" id="xDim" value="12"><br>
+
+<label>Y dimension (time):</label><br>
+<input type="number" id="yDim" value="64"><br>
+
+<label>Symbol duration (ms per column):</label><br>
+<input type="number" id="symbolMs" value="200"><br>
+
+<button onclick="processImage()">Generate</button>
+<button onclick="startWaterfall()">▶ Start Waterfall</button>
+<h3>C Array Output</h3>
+<textarea id="cOutput"></textarea>
+
+<h3>ASCII Preview</h3>
+<textarea id="asciiOutput" readonly></textarea>
+
+<h3>Live Waterfall Simulation</h3>
+<canvas id="waterfall"></canvas>
+
+<canvas id="hiddenCanvas" style="display:none;"></canvas>
+
+<script>
+let glyph = [];
+let glyphX = 0;
+let timer = null;
+
+function processImage() {
+    const fileInput = document.getElementById("fileInput");
+    const xDim = parseInt(document.getElementById("xDim").value);
+    const yDim = parseInt(document.getElementById("yDim").value);
+    const asciiOutput = document.getElementById("asciiOutput");
+
+    if (!fileInput.files.length) {
+        alert("Select a BMP file.");
+        return;
+    }
+
+    const img = new Image();
+    img.onload = function () {
+        const canvas = document.getElementById("hiddenCanvas");
+        const ctx = canvas.getContext("2d");
+
+        canvas.width = xDim;
+        canvas.height = yDim;
+
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(img, 0, 0, xDim, yDim);
+
+        const data = ctx.getImageData(0, 0, xDim, yDim).data;
+
+        glyph = [];
+        let ascii = "";
+
+        for (let y = 0; y < yDim; y++) {
+            glyph[y] = [];
+            for (let x = 0; x < xDim; x++) {
+                const i = (y * xDim + x) * 4;
+                const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
+                const bit = brightness < 128 ? 1 : 0;
+                glyph[y][x] = bit;
+                ascii += bit ? "#" : ".";
+            }
+            ascii += "\n";
+        }
+const cOutput = document.getElementById("cOutput");
+
+let cCode = `uint8_t glyph[${yDim}][${xDim}] = {\n`;
+
+for (let y = 0; y < yDim; y++) {
+    cCode += "    {";
+    for (let x = 0; x < xDim; x++) {
+        cCode += glyph[y][x];
+        if (x < xDim - 1) cCode += ", ";
+    }
+    cCode += "}";
+    if (y < yDim - 1) cCode += ",";
+    cCode += "\n";
+}
+
+cCode += "};";
+cOutput.value = cCode;
+
+        asciiOutput.value = ascii;
+        setupWaterfall();
+    };
+
+    img.src = URL.createObjectURL(fileInput.files[0]);
+}
+
+function setupWaterfall() {
+    const wf = document.getElementById("waterfall");
+    wf.width = glyph[0].length;
+    wf.height = 200;
+
+    const ctx = wf.getContext("2d");
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, wf.width, wf.height);
+}
+
+function startWaterfall() {
+    if (!glyph.length) {
+        alert("Generate glyph first.");
+        return;
+    }
+
+    const wf = document.getElementById("waterfall");
+    const ctx = wf.getContext("2d");
+    const symbolMs = parseInt(document.getElementById("symbolMs").value);
+    const xDim = glyph[0].length;
+    const yDim = glyph.length;
+
+    if (timer) clearInterval(timer);
+    glyphX = 0;
+
+    timer = setInterval(() => {
+        // Scroll down by 1 pixel
+        const img = ctx.getImageData(0, 0, wf.width, wf.height - 1);
+        ctx.putImageData(img, 0, 1);
+
+        // Draw new top row (one QRSS time slice)
+        for (let x = 0; x < xDim; x++) {
+            ctx.fillStyle = glyph[yDim - 1 - glyphX]?.[x] ? "white" : "black";
+            ctx.fillRect(x, 0, 1, 1);
+        }
+
+        glyphX++;
+        if (glyphX >= yDim) {
+            clearInterval(timer);
+        }
+    }, symbolMs);
+}
+</script>
+
+
+
+
+</body>
+</html>
