@@ -459,7 +459,7 @@ show_values();          /* shows current VALUES  AND list of Valid Commands */
 			case 'C':get_user_input("Enter callsign: ",_callsign,sizeof(_callsign)); convertToUpperCase(_callsign); write_NVRAM(); break;
 			case 'S':get_user_input("Enter single digit numeric suffix: ", _suffix, sizeof(_suffix)); convertToUpperCase(_suffix); write_NVRAM(); break;
 			case 'U':get_user_input("Enter U4B channel: ", _U4B_chan, sizeof(_U4B_chan)); process_chan_num(); write_NVRAM(); break;
-			case 'B':get_user_input("Band (F-M): ", _band, sizeof(_band));   convertToUpperCase(_band); write_NVRAM(); break;
+			case 'B':get_user_input("Band (F-M): ", _band, sizeof(_band));   convertToUpperCase(_band); process_chan_num(); write_NVRAM(); break;
 /*			case 'I':get_user_input("Enter id13: ", _id13,sizeof(_id13)); convertToUpperCase(_id13); write_NVRAM(); break; //still possible but not listed or recommended
 			case 'M':get_user_input("Enter starting Minute: ", _start_minute, sizeof(_start_minute)); write_NVRAM(); break; //still possible but not listed or recommended. i suppose needed for when to start standalone beacon or Zachtek
 			case 'L':get_user_input("Enter Lane (1,2,3,4): ", _lane, sizeof(_lane)); write_NVRAM(); break; //still possible but not listed or recommended 
@@ -678,7 +678,7 @@ printf("VALID commands: ");printf(UNDERLINE_OFF);printf(NORMAL);
 printf("\n\n\tX: eXit configuraiton and reboot\n\tC: change Callsign (6 char max)\n\t");
 //printf("S: change Suffix ( for WSPR3/Zachtek) use '-' to disable WSPR3\n\t");
 printf("U: change U4b channel # (0-599)\n\t");
-printf("B: change Band (F-M) default 20M is H\n\t");
+printf("B: change Band F:40,G:30,H:20,I:17,J:15,K:12,L:10,M:6\n\t"); 
 /*printf("I: change Id13 (two alpha numeric chars, ie Q8) use '--' to disable U4B\n\t");
 printf("M: change starting Minute (0,2,4,6,8)\n\tL: Lane (1,2,3,4) corresponding to 4 frequencies in 20M band\n\t");*/ //it is still possible to directly change these, but its not shown
 printf("V: Verbosity level (0 for no messages, 9 for too many) \n\t");
@@ -1091,7 +1091,7 @@ void go_to_sleep()
 			*/
 }
 ////////////////////////////////////
-void process_chan_num()   //need to update for bands other than 20M and 10M
+void process_chan_num()   
 {
 	if ( (atoi(_U4B_chan)>=0) && (atoi(_U4B_chan)<600)) 
 	{
@@ -1109,10 +1109,30 @@ void process_chan_num()   //need to update for bands other than 20M and 10M
 		int txSlot = atoi(_U4B_chan) % 5;
 		
 
-		_start_minute[0] = '0' + (2*((txSlot+14)%5)); //default starting minute for 20M
+		_start_minute[0] = '0' + (2*((txSlot+4)%5)); //default starting minute for 20M
 
 		if (_band[0]=='L')  //10 Meter
-		_start_minute[0] = '0' + (2*((txSlot+12)%5)); 
+		_start_minute[0] = '0' + (2*((txSlot+2)%5)); 
+
+
+		if (_band[0]=='F')  // 40 Meter
+		_start_minute[0] = '0' + (2*((txSlot+0)%5)); 
+
+		if (_band[0]=='G')  // 30 Meter
+		_start_minute[0] = '0' + (2*((txSlot+2)%5)); 
+
+		if (_band[0]=='I')  // 17 Meter
+		_start_minute[0] = '0' + (2*((txSlot+1)%5)); 
+
+		if (_band[0]=='J')  // 15 Meter
+		_start_minute[0] = '0' + (2*((txSlot+3)%5)); 
+
+		if (_band[0]=='K')  // 12 Meter
+		_start_minute[0] = '0' + (2*((txSlot+0)%5)); 
+
+		if (_band[0]=='M')  // 6 Meter
+		_start_minute[0] = '0' + (2*((txSlot+4)%5)); 
+
 
 	}
 }
