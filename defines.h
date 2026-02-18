@@ -147,6 +147,7 @@ typedef struct
     char _u8_last_digit_hour;  
 	char _full_time_string[7];
 	uint32_t hour;
+	uint32_t knots;
 	uint32_t minute;
     int64_t _i64_lat_100k, _i64_lon_100k;       /* The lat, lon, degrees, multiplied by 1e5. */
 	

@@ -119,6 +119,8 @@ int parse_GPS_data(GPStimeContext *pg)
 				
         pg->_time_data._u8_is_solution_active = (prmc[u8ixcollector[5]]>48);   //numeric 0 for no fix, 1 2 or 3 for various fix types //printf("char is: %c\n",prmc[u8ixcollector[5]]);
 		pg->_time_data.sat_count = atoi((const char *)prmc + u8ixcollector[6]); 
+		float speed = (float) strtod( (const char *)prmc + u8ixcollector[5],NULL);  //fyi this is a much cleaner way to extract value. quits parsing at comma automatically
+		pg->_time_data.knots = speed/2;
 		
 															if ((spGPStimeContext->verbosity>=6)&&(spGPStimeContext->user_setup_menu_active==0 )) printf("sat count: %d\n",pg->_time_data.sat_count);
 
@@ -158,8 +160,7 @@ int parse_GPS_data(GPStimeContext *pg)
 			pg->_altitude=f;    	
 			//pg->_altitude=12500;     //FORCING A SPECIFIC ALTITUDE for debugging		
 		
-		  //printf("GPS Latitude:%lld Longtitude:%lld\n", pg->_time_data._i64_lat_100k, pg->_time_data._i64_lon_100k);
-		
+		  //printf("GPS Latitude:%lld Longtitude:%lld\n", pg->_time_data._i64_lat_100k, pg->_time_data._i64_lon_100k);		
 		
 		}
     }

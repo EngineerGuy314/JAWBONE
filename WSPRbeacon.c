@@ -308,7 +308,7 @@ int WSPRbeaconCreatePacket(WSPRbeaconContext *pctx,int packet_type)  //1-6.  1: 
    {
 	first_broadcast_of_the_day=0;
 
-	pctx->_u8_txpower =10;               //hardcoded at 10dbM when doing u4b MSG 1
+	pctx->_u8_txpower =13;               //hardcoded at 13dbM when doing u4b MSG 1
 				if (pctx->_txSched.verbosity>=3){ printf("creating U4B packet 1\n");printf("location for Xmit: %s%c%c%c%c%c%c lat/lon: %lld %lld\n", _4_char_version_of_locator,grid5,grid6,grid7,grid8,grid9,grid10,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k);}				
 	wspr_encode(pctx->_pu8_callsign, _4_char_version_of_locator, pctx->_u8_txpower, pctx->_pu8_outbuf, pctx->_txSched.verbosity);   // look in utility.c for wspr_encode
    }
@@ -373,8 +373,9 @@ int WSPRbeaconCreatePacket(WSPRbeaconContext *pctx,int packet_type)  //1-6.  1: 
         uint8_t tempCNum      = (uint8_t)(tempC - -50) % 90;
         uint8_t voltageNum    = ((int16_t)round(((voltage * 100) - 300) / 5) + 20) % 40;
  
-		uint8_t speedKnotsNum = pctx->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count;   //encoding # of sattelites into knots
-        uint8_t gpsValidNum   = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_is_solution_active;
+		//uint8_t speedKnotsNum = pctx->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count;   //encoding # of sattelites into knots
+        uint8_t speedKnotsNum = pctx->_pTX->_p_oscillator->_pGPStime->_time_data.knots;   //Feb 2026 - going to use knots as intended
+		uint8_t gpsValidNum   = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_is_solution_active;
         gpsValidNum=1; //changed sept 27 2024. because the traquito site won't show the 6 char grid if this bit is even momentarily off. Anyway, redundant cause sat count is sent as knots
 		// shift inputs into a big number
         val = 0;
