@@ -285,13 +285,13 @@ void process_TELEN_data(void)
 							
 							break;
 
-				case '7':   //similar to 5, sends additional 4 chars of Maidenhead, BUT, sends chars in this order 7,9,8,10 to make it easier on WSPRTV decoding
+				case '7':   //similar to 5, sends additional 4 chars of Maidenhead, BUT, sends chars in this order 9,7,10,8 to make it easier on WSPRTV decoding
 		
 							//printf("chars 7-10 %d %d %d %d and as chars %c%c%c%c   \n",pWSPR->grid7,pWSPR->grid8,pWSPR->grid9,pWSPR->grid10,pWSPR->grid7,pWSPR->grid8,pWSPR->grid9,pWSPR->grid10);
-							pWSPR->telem_vals_and_ranges[i][0 ]=(v_and_r){pWSPR->grid7-'0' ,10}; 
-							pWSPR->telem_vals_and_ranges[i][2 ]=(v_and_r){pWSPR->grid8 -'0',10};
-							pWSPR->telem_vals_and_ranges[i][1 ]=(v_and_r){pWSPR->grid9 -'A',24}; 
-							pWSPR->telem_vals_and_ranges[i][3 ]=(v_and_r){pWSPR->grid10-'A',24}; 
+							pWSPR->telem_vals_and_ranges[i][1 ]=(v_and_r){pWSPR->grid7-'0' ,10}; 
+							pWSPR->telem_vals_and_ranges[i][3 ]=(v_and_r){pWSPR->grid8 -'0',10};
+							pWSPR->telem_vals_and_ranges[i][0 ]=(v_and_r){pWSPR->grid9 -'A',24}; 
+							pWSPR->telem_vals_and_ranges[i][2 ]=(v_and_r){pWSPR->grid10-'A',24}; 
 							pWSPR->telem_vals_and_ranges[i][4]=(v_and_r){(int)round(pWSPR->_txSched.minutes_since_boot/10.0),101}; 
 							pWSPR->telem_vals_and_ranges[i][5]=(v_and_r){(int)round(pWSPR->_txSched.seconds_for_lock/10.0),101}; 			
 							break;
