@@ -62,23 +62,41 @@ static void sleep_callback(void) {
     printf("RTC woke us up\n");
 }
 //****************************************************************************************************************************************************************
-void telem_add_values_to_Big64(int slot, WSPRbeaconContext *c) //for DEXT, cycles through value/range array and for non-zero ranges packs  'em into Big64
+void telem_add_values_to_Big64(int slot, WSPRbeaconContext *c) //for Generic-ET, cycles through value/range array and for non-zero ranges packs  'em into Big64. inserts slot into correct place and sets the ExtendedTelemetry bit
 {							
 uint64_t val=0;
+uint32_t the_lowest_six_bits;
 
 int max_len = sizeof(c->telem_vals_and_ranges[0]) / sizeof(c->telem_vals_and_ranges[0][0]);  
+printf("slot%d values: ",slot);          // MARKED FOR DELETION
 for (int i = max_len-1; i >= 0; i--) 
 	if (c->telem_vals_and_ranges[slot][i].range>0)
 	{
 		c->telem_vals_and_ranges[slot][i].value = c->telem_vals_and_ranges[slot][i].value % c->telem_vals_and_ranges[slot][i].range; //anti-stupid to fix potential overflow of bad values
 		val *= c->telem_vals_and_ranges[slot][i].range;   // shift Big64 by the max range of the value
-		val += c->telem_vals_and_ranges[slot][i].value;	// add the value to Big64
+		val += c->telem_vals_and_ranges[slot][i].value;	// add the value to Big64		
 	}
+	
+	
+for (int i = 0; i <max_len; i++) printf("%d ,",c->telem_vals_and_ranges[slot][i].value); // MARKED FOR DELETION
+printf("\n"); // MARKED FOR DELETION
+
+
+	the_lowest_six_bits= val & 0x3F;    //extract the lowest 6 bits
+	val /= 0x40; 					    //shift right 6 bits    
+	val *=5; 							//make room for the slot
+	val += slot;						//insert slot value
+	val *= 0x40; 						//shift left 6 bits
+	val += the_lowest_six_bits;			//insert the lowest 6 bits of user data
+			
+	val *=2; 	val+=0;     			//specify extended telemetry   2 values (1 bit)   
+
 
 c->Big64=val;
 }
 
 /////****************************************************************************************
+/* legacy from before Generic Extended Telemetry pre Feb '26
 void telem_add_header( int slot, WSPRbeaconContext *c)
 {
 uint64_t val=c->Big64;
@@ -90,7 +108,7 @@ val *=2; 	val+=0;      //specify extended telemetry   2 values (1 bit)
 
 c->Big64=val;
 }
-
+*/
 /////****************************************************************************************
 void telem_convert_Big64_to_GridLocPower(WSPRbeaconContext *c)
 {  		//does the unpacking of Big64 into grid callsign and power based on the radix's of char destinations
@@ -487,8 +505,8 @@ if ((packet_type==5)||(packet_type==6)||(packet_type==7)) 	 //packet type 5,6,7 
 	int DEXT_slot=packet_type-3;							 //packet type 5,6,7 corresponds to DEXT slot 2,3,4
 	if (pctx->_txSched.verbosity>=3) printf("creating DEXT packet 1\n");
 	
-	telem_add_values_to_Big64(DEXT_slot,pctx);   //cycles through value array and for non-zero ranges and packs  'em into Big64
-	telem_add_header( DEXT_slot, pctx);   //slot #
+	telem_add_values_to_Big64(DEXT_slot,pctx);   //cycles through value array and for non-zero ranges and packs  'em into Big64, addss slot number and special bit
+	//telem_add_header( DEXT_slot, pctx);   //slot #  MERGED INTO PREVIOUS INSTRUCTION Feb '26 for Greneric ET
 	telem_convert_Big64_to_GridLocPower(pctx); //does the unpacking of Big64 based on radix's of char destinations
 	wspr_encode(pctx->telem_callsign, pctx->telem_4_char_loc, pctx->telem_power, pctx->_pu8_outbuf, pctx->_txSched.verbosity);   // look in WSPRutility.c for wspr_encode
    }

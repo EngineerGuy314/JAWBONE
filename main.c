@@ -70,7 +70,7 @@ const uint32_t freqs[14] =   							//A:LF,B:MF,C:160,D:80,E:60,F:40,G:30,H:20,I
 int main()
 {
 	
-	StampPrintf("\n");DoLogPrint(); // needed asap to wake up the USB stdio port (because StampPrintf includes stdio_init_all();). why though?
+	StampPrintf("\n");DoLogPrint(); srand((unsigned int)time(NULL));// needed asap to wake up the USB stdio port (because StampPrintf includes stdio_init_all();). why though?
 	for (int i=0;i < 5;i++) {printf("*");sleep_ms(100);}			
  
 	read_NVRAM();				//reads values of _callsign,  _verbosity etc from NVRAM. MUST READ THESE *BEFORE* InitPicoPins
@@ -223,7 +223,7 @@ static void sleep_callback(void) {
 void process_TELEN_data(void)
 {
 		const float conversionFactor = 33.0f / (1 << 12);   //. the 3.3 is from vref, the 10 is to convert to volt tenths the 12 bit shift is because thats resolution of ADC
-
+		int randomm;
 
 		for (int i=2;i < 5;i++) //i is slot # (2,3,4)
 		{			
@@ -302,6 +302,53 @@ void process_TELEN_data(void)
 							if (pWSPR->_txSched.seconds_for_lock>200) clamped_value=200; //clamp to max
 							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){clamped_value,201}; 
 							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){round((float)adc_read() * conversionFactor * 3.0f * 10),501}; 									
+							break;
+
+				case 'A': 			//GET testing
+							pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){0,13}; 
+							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){0,200}; 
+							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){0,3}; 
+							pWSPR->telem_vals_and_ranges[i][3]=(v_and_r){0,1024}; 
+							pWSPR->telem_vals_and_ranges[i][4]=(v_and_r){0,16}; 
+							pWSPR->telem_vals_and_ranges[i][5]=(v_and_r){0,5}; 
+							pWSPR->telem_vals_and_ranges[i][6]=(v_and_r){0,55}; 
+							
+							
+								//printf("slot 2 values: ");
+								for (int ii=0;ii < 7;ii++)
+								{
+									randomm= rand() % pWSPR->telem_vals_and_ranges[i][ii].range;
+									//printf("%d ,",randomm);
+									pWSPR->telem_vals_and_ranges[i][ii].value=randomm;
+									//stuff
+								}
+								//printf("\n");
+							
+							
+							break;
+
+				case 'B': 			//GET testing
+							pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){0,199}; 
+							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){0,1000}; 
+							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){0,501}; 
+							pWSPR->telem_vals_and_ranges[i][3]=(v_and_r){0,18}; 
+							pWSPR->telem_vals_and_ranges[i][4]=(v_and_r){0,21}; 
+
+
+								//printf("slot 3 values: ");
+								for (int ii=0;ii < 5;ii++)
+								{
+									randomm= rand() % pWSPR->telem_vals_and_ranges[i][ii].range;
+									//printf("%d ,",randomm);
+									pWSPR->telem_vals_and_ranges[i][ii].value=randomm;
+									//stuff
+								}
+								//printf("\n");
+
+
+					
+							break;
+
 			}	
 		}
 }
@@ -403,16 +450,16 @@ void show_TELEN_msg()
 {
 printf(BRIGHT);
 printf("\n\n\n\n");printf(UNDERLINE_ON);
-printf("DEXT (Doug's EXtended Telemetry) CONFIG INSTRUCTIONS:\n\n");printf(UNDERLINE_OFF);
+printf("GET (Generic Extended Telemetry) CONFIG INSTRUCTIONS:\n\n");printf(UNDERLINE_OFF);
 printf(NORMAL); 
-printf("\n (DEXT is also known as community driven Extended Telemetry )\n\n");
-printf("* There are 3 possible DEXT values, corresponding to DEXT slots 2,3 and 4,\n");
+printf("\n (Generic-ET has supersized DEXT, aka ET0, aka ET)\n\n");
+printf("* There are 3 possible GET values, corresponding to slots 2,3 and 4,\n");
 printf("  (Slots 0 and 1 are used by WSPR Type 1 and U4B Basic Telemetry)\n");
-printf("  DEXT slot 2 type, DEXT slot 3 type and DEXT slot 4 type.\n");
-printf("* Enter 3 characters in DEXT_config. use a '-' (minus) to disable one \n");
-printf("  or more values.\n* example: '---' disables all DEXT \n");
-printf("* example: '01-' sets DEXT 2  to type 0, \n  DEXT 3 to type 1,  disables DEXT slot 4 \n"); printf(BRIGHT);printf(UNDERLINE_ON);
-printf("\nDEXT Types:\n\n");printf(UNDERLINE_OFF);printf(NORMAL); 
+printf("  GET slot 2 type, GET slot 3 type and DEXT slot 4 type.\n");
+printf("* Enter 3 characters in GET_config. use a '-' (minus) to disable one \n");
+printf("  or more values.\n* example: '---' disables all GET \n");
+printf("* example: '01-' sets GET 2  to type 0, \n  GET 3 to type 1,  disables GET slot 4 \n"); printf(BRIGHT);printf(UNDERLINE_ON);
+printf("\nGET Types:\n\n");printf(UNDERLINE_OFF);printf(NORMAL); 
 printf("-: disabled, 0: minutes since boot, minutes since GPS fix aquired, GPS valid bit and Sat count \n");
 printf("... many more !... \n");
 printf("See the Wiki for full list and range info.\n\n");
@@ -470,7 +517,7 @@ show_values();          /* shows current VALUES  AND list of Valid Commands */
 			case 'O':get_user_input("Optional debug (0-255 bitmapped): ", _Optional_Debug, sizeof(_Optional_Debug)); write_NVRAM(); break;
 //			case 'P':get_user_input("custom Pcb mode (0,1): ", _custom_PCB, sizeof(_custom_PCB)); write_NVRAM(); break;
 			//case 'H':get_user_input("band Hop mode (0,1): ", _band_hop, sizeof(_band_hop)); write_NVRAM(); break;
-			case 'T':show_TELEN_msg();get_user_input("Telemetry (dexT) config: ", _DEXT_config, sizeof(_DEXT_config)-1); convertToUpperCase(_DEXT_config); write_NVRAM(); break;
+			case 'T':show_TELEN_msg();get_user_input("Telemetry (GET) config: ", _DEXT_config, sizeof(_DEXT_config)-1); convertToUpperCase(_DEXT_config); write_NVRAM(); break;
 			//case 'B':get_user_input("Battery mode (0,1): ", _battery_mode, sizeof(_battery_mode)); write_NVRAM(); break;
 			/*case 'D':get_user_input("Data-log mode (0,1,Wipe,Dump): ", _Datalog_mode, sizeof(_Datalog_mode));
 						convertToUpperCase(_Datalog_mode);
@@ -686,7 +733,7 @@ printf("M: change starting Minute (0,2,4,6,8)\n\tL: Lane (1,2,3,4) corresponding
 printf("V: Verbosity level (0 for no messages, 9 for too many) \n\t");
 printf("O: Optional debug functions (bitmapped 0 - 255) \n\t");
 //printf("P: custom Pcb mode IO mappings (0,1)\n\t");
-printf("T: Telemetry (extended) config\n\t");
+printf("T: generic extended Telemetry config\n\t");
 //printf("K: Klock speed  \n\t");
 //printf("D: Datalog mode (0,1,(W)ipe memory, (D)ump memory) see wiki\n\t");
 //printf("B: Battery (low power) mode \n\t");
