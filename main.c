@@ -305,17 +305,24 @@ void process_TELEN_data(void)
 							break;
 
 				case 'A': 			//GET testing
-							pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){0,13}; 
+							/*pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){0,13}; 
 							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){0,200}; 
 							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){0,3}; 
 							pWSPR->telem_vals_and_ranges[i][3]=(v_and_r){0,1024}; 
 							pWSPR->telem_vals_and_ranges[i][4]=(v_and_r){0,16}; 
 							pWSPR->telem_vals_and_ranges[i][5]=(v_and_r){0,5}; 
-							pWSPR->telem_vals_and_ranges[i][6]=(v_and_r){0,55}; 
+							pWSPR->telem_vals_and_ranges[i][6]=(v_and_r){0,55}; */
+							pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){12,13}; 
+							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){199,200}; 
+							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){2,3}; 
+							pWSPR->telem_vals_and_ranges[i][3]=(v_and_r){1023,1024}; 
+							pWSPR->telem_vals_and_ranges[i][4]=(v_and_r){15,16}; 
+							pWSPR->telem_vals_and_ranges[i][5]=(v_and_r){4,5}; 
+							pWSPR->telem_vals_and_ranges[i][6]=(v_and_r){54,55}; 
 							
 							
 								//printf("slot 2 values: ");
-								for (int ii=0;ii < 7;ii++)
+						/*		for (int ii=0;ii < 7;ii++)
 								{
 									randomm= rand() % pWSPR->telem_vals_and_ranges[i][ii].range;
 									//printf("%d ,",randomm);
@@ -323,20 +330,26 @@ void process_TELEN_data(void)
 									//stuff
 								}
 								//printf("\n");
-							
+							*/
 							
 							break;
 
 				case 'B': 			//GET testing
-							pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){0,199}; 
+							/*pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){0,199}; 
 							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){0,1000}; 
 							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){0,501}; 
 							pWSPR->telem_vals_and_ranges[i][3]=(v_and_r){0,18}; 
-							pWSPR->telem_vals_and_ranges[i][4]=(v_and_r){0,21}; 
+							pWSPR->telem_vals_and_ranges[i][4]=(v_and_r){0,21}; */
+							pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){198,199}; 
+							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){999,1000}; 
+							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){500,501}; 
+							pWSPR->telem_vals_and_ranges[i][3]=(v_and_r){17,18}; 
+							pWSPR->telem_vals_and_ranges[i][4]=(v_and_r){20,21}; 
+
 
 
 								//printf("slot 3 values: ");
-								for (int ii=0;ii < 5;ii++)
+							/*	for (int ii=0;ii < 5;ii++)
 								{
 									randomm= rand() % pWSPR->telem_vals_and_ranges[i][ii].range;
 									//printf("%d ,",randomm);
@@ -344,7 +357,7 @@ void process_TELEN_data(void)
 									//stuff
 								}
 								//printf("\n");
-
+*/
 
 					
 							break;

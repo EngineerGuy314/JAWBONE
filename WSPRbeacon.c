@@ -84,7 +84,7 @@ printf("\n"); // MARKED FOR DELETION
 
 	the_lowest_six_bits= val & 0x3F;    //extract the lowest 6 bits
 	val /= 0x40; 					    //shift right 6 bits    
-	val *=5; 							//make room for the slot
+	val *=5; 							//make room for the slot (shift left ~2.3 bits)
 	val += slot;						//insert slot value
 	val *= 0x40; 						//shift left 6 bits
 	val += the_lowest_six_bits;			//insert the lowest 6 bits of user data
