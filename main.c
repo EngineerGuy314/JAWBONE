@@ -205,11 +205,11 @@ int main()
 				//if (pWB->_txSched.verbosity>=3) printf("TELEN Vals 1 through 4:  %d %d %d %d\n",telen_values[0],telen_values[1],telen_values[2],telen_values[3]);
 				}
 		
-		for (int i=0;i < 10;i++) //Implements a pause of total 500ms, and spends it handling LED output
-			{
+		//for (int i=0;i < 10;i++) //Implements a pause of total 500ms, and spends it handling LED output
+		//	{
 				handle_LED(pWB->_txSched.led_mode); 
 				sleep_ms(50); 
-			}
+			//}
 		DoLogPrint(); 	
 	}
 }
