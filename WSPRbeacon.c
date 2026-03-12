@@ -57,6 +57,8 @@ extern char _band_hop[2];         //"extern" is a sneaky and lazy way to get acc
 extern uint32_t XMIT_FREQUENCY;
 extern uint32_t XMIT_FREQUENCY_10_METER;
 extern int RFOUT_PIN;
+extern int xmit_count;
+extern int32_t seconds_for_lock_previous;
 
 static void sleep_callback(void) {
     printf("RTC woke us up\n");
@@ -219,6 +221,7 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	printf("Position Lock received! it took %.1f secs\n",absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0);
 					SEQ=40;
 					pctx->_txSched.led_mode = 2; //gps is locked
+					seconds_for_lock_previous=pctx->_txSched.seconds_for_lock;
 					pctx->_txSched.seconds_for_lock=absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0;
 				}
 	}
@@ -271,6 +274,7 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 		gpio_put(GPS_ENABLE_PIN,1); sleep_ms(2);gpio_put(VFO_ENABLE_PIN,0);sleep_ms(2); //VFO ON, GPS off
 		pctx->_txSched.led_mode = 3; //TRansmittion in progress
 		SEQ=70;
+		xmit_count++;
 	}
 
 	if (SEQ==70) //create and send packet

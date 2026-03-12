@@ -63,6 +63,9 @@ static float volts=0;
 static float tempC=0;
 uint32_t XMIT_FREQUENCY;
 uint32_t XMIT_FREQUENCY_10_METER;  //deprecated
+int xmit_count=0;
+int32_t seconds_for_lock_previous=0;
+
 const uint32_t freqs[14] =   							//A:LF,B:MF,C:160,D:80,E:60,F:40,G:30,H:20,I:17,J:15,K:12,L:10,M:6,N:2 
     {137500,475700,1838100,3570100,5288700,7040100,10140200,14097100,18106100,21096100,24926100,28126100,50294500,144490500}; 
 
@@ -285,23 +288,27 @@ void process_TELEN_data(void)
 							
 							break;
 
-				case '7':   //similar to 5, sends additional 4 chars of Maidenhead, BUT, sends chars in this order 9,7,10,8 to make it easier on WSPRTV decoding
+				case '7':   // "NEWSTYLE" 7 for Generic ET
 		
-							//printf("chars 7-10 %d %d %d %d and as chars %c%c%c%c   \n",pWSPR->grid7,pWSPR->grid8,pWSPR->grid9,pWSPR->grid10,pWSPR->grid7,pWSPR->grid8,pWSPR->grid9,pWSPR->grid10);
 							pWSPR->telem_vals_and_ranges[i][1 ]=(v_and_r){pWSPR->grid7-'0' ,10}; 
 							pWSPR->telem_vals_and_ranges[i][3 ]=(v_and_r){pWSPR->grid8 -'0',10};
 							pWSPR->telem_vals_and_ranges[i][0 ]=(v_and_r){pWSPR->grid9 -'A',24}; 
 							pWSPR->telem_vals_and_ranges[i][2 ]=(v_and_r){pWSPR->grid10-'A',24}; 
-							pWSPR->telem_vals_and_ranges[i][4]=(v_and_r){(int)round(pWSPR->_txSched.minutes_since_boot/10.0),101}; 
-							pWSPR->telem_vals_and_ranges[i][5]=(v_and_r){(int)round(pWSPR->_txSched.seconds_for_lock/10.0),101}; 			
+							pWSPR->telem_vals_and_ranges[i][4]=(v_and_r){(int)round(pWSPR->_txSched.minutes_since_boot),1440}; 
+							pWSPR->telem_vals_and_ranges[i][5]=(v_and_r){xmit_count,420}; 			
 							break;
 
-				case '8': 			//some things   (58-)
-							pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){(int)round(pWSPR->_txSched.minutes_since_boot),6001}; 
-							uint32_t clamped_value=pWSPR->_txSched.seconds_for_lock;
-							if (pWSPR->_txSched.seconds_for_lock>200) clamped_value=200; //clamp to max
-							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){clamped_value,201}; 
-							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){round((float)adc_read() * conversionFactor * 3.0f * 10),501}; 									
+				case '8': 			//"NEWSTYLE" 8 for Generic ET
+							pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){round((float)adc_read() * conversionFactor * 3.0f * 10),600}; 									
+							uint32_t clamped_value=pWSPR->_txSched.seconds_for_lock;							
+							if (clamped_value>599) clamped_value=599;
+							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){clamped_value,600}; 
+							clamped_value=seconds_for_lock_previous;						
+							if (clamped_value>599) clamped_value=599;
+							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){clamped_value,600}; 
+							pWSPR->telem_vals_and_ranges[i][3]=(v_and_r){pWSPR->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count,59};
+														
+							
 							break;
 
 				case 'A': 			//GET testing
