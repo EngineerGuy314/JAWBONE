@@ -60,6 +60,7 @@ extern int RFOUT_PIN;
 extern int xmit_count;
 extern int32_t seconds_for_lock_previous;
 
+
 static void sleep_callback(void) {
     printf("RTC woke us up\n");
 }
@@ -533,6 +534,24 @@ int WSPRbeaconSendPacket(const WSPRbeaconContext *pctx)
 ///////////////////////////////////////////////////////////
 /// @brief Dumps the beacon context to stdio.
 /// @param pctx Ptr to Context.
+void misc_dump(const WSPRbeaconContext *pctx)  //called ~ every 5 secs from main.c if option set to 4  wuz
+{
+    //const uint64_t u64tmnow = GetUptime64();
+    //StampPrintf("__________________");
+   // GPStimeContext *pGPS = pctx->_pTX->_p_oscillator->_pGPStime;
+	printf("LED Mode: %d\n",pctx->_txSched.led_mode);
+	
+	//printf("\n%s\n",global_msg);//
+	//StampPrintf("Grid: %s",(char *)WSPRbeaconGetLastQTHLocator(pctx));
+	printf("lat: %lli\n",pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k);
+	printf("lon: %lli\n",pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k);
+	
+	printf("knots: %d \n",pctx->_pTX->_p_oscillator->_pGPStime->_time_data.knots);
+	
+	//StampPrintf("altitude: %f",pctx->_pTX->_p_oscillator->_pGPStime->_altitude);	   
+	//StampPrintf("current minute: %i",current_minute);	   
+}
+
 void WSPRbeaconDumpContext(const WSPRbeaconContext *pctx)  //called ~ every 20 secs from main.c
 {
     const uint64_t u64tmnow = GetUptime64();

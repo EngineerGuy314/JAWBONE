@@ -348,6 +348,7 @@ int WSPRbeaconSendPacket(const WSPRbeaconContext *pctx);
 char EncodeBase36(uint8_t val);
 int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose);
 void WSPRbeaconDumpContext(const WSPRbeaconContext *pctx);
+void misc_dump(const WSPRbeaconContext *pctx);
 char *WSPRbeaconGetLastQTHLocator(WSPRbeaconContext *pctx);
 uint8_t WSPRbeaconIsGPSsolutionActive(const WSPRbeaconContext *pctx);
 void encode_telen(uint32_t telen_val1,uint32_t telen_val2,char * telen_chars,uint8_t * telen_power, uint8_t packet_type);  
@@ -368,6 +369,7 @@ void GPStimeDestroy(GPStimeContext **pp);
 int parse_GPS_data(GPStimeContext *pg);
 void RAM (GPStimeUartRxIsr)();
 void GPStimeDump(const GPStimeData *pd);
+bool get_8th_field_as_float(const char *line, double *out_val);
 inline uint64_t GetUptime64(void)
 {
     const uint32_t lo = timer_hw->timelr;

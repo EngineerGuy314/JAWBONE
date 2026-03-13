@@ -150,7 +150,7 @@ int main()
 	strcpy(pWB->_txSched.id13,_id13);
 	RfGen._pGPStime->user_setup_menu_active=0;
 	RfGen._pGPStime->verbosity=(uint8_t)_verbosity[0]-'0';   
-    int tick = 0;int tick2 = 0;  //used for timing various messages
+    int tick = 0;int tick2 = 0;int tickd = 0;  //used for timing various messages
 	LED_sequence_start_time = get_absolute_time();
 	if (_Datalog_mode[0]=='1') datalog_loop();
 	
@@ -172,6 +172,13 @@ int main()
 				if(0 == ++tick % 20)      //every ~20 secs dumps context.  
 				 WSPRbeaconDumpContext(pWB);
 		}	
+
+		if (pWSPR->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))
+				{
+				if(0 == ++tickd % 40)      //every ~5 secs dumps context.  
+				 misc_dump(pWB);
+
+				}	
 
 		if (getchar_timeout_us(0)>0)   //looks for input on USB serial port only. Note: getchar_timeout_us(0) returns a -2 (as of sdk 2) if no keypress. But if you force it into a Char type, becomes something else
 			{

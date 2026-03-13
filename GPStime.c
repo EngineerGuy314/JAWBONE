@@ -36,7 +36,7 @@ GPStimeContext *GPStimeInit(int uart_baud)
     irq_set_exclusive_handler(UART1_IRQ, GPStimeUartRxIsr);
     irq_set_enabled(UART1_IRQ, true);
     uart_set_irq_enables(uart1, true, false);
-    
+	
 	return pgt;
 }
 
@@ -82,16 +82,50 @@ void RAM (GPStimeUartRxIsr)()
 }
 
 /// @brief Processes a NMEA sentence GxRMC.
+///////****************************************************************************
+bool get_8th_field_as_float(const char *line, double *out_val) {
+    if (!line || !out_val) return false;
 
+    char buf[512];
+    strncpy(buf, line, sizeof(buf));
+    buf[sizeof(buf)-1] = '\0'; // ensure null termination
+
+    char *token;
+    char *rest = buf;
+    int field_num = 0;
+
+    while ((token = strsep(&rest, ",")) != NULL) {  // strsep handles empty fields
+        field_num++;
+        if (field_num == 8) {
+            // Skip empty fields
+            if (token[0] == '\0') return false;
+
+            char *endptr;
+            double val = strtod(token, &endptr);
+            if (endptr == token) return false;  // not a number
+            *out_val = val;
+            return true;
+        }
+    }
+
+    return false;  // fewer than 8 fields
+}
+//***************************************************************************
 int parse_GPS_data(GPStimeContext *pg)
 {                                               //"$GxRMC has time, locations, altitude and sat count! unlike $xxGGA it does NOT have date, but so what
-    uint8_t *prmc = (uint8_t *)strnstr((char *)pg->_pbytebuff, "$GPGGA,", sizeof(pg->_pbytebuff));
-    uint8_t *nrmc = (uint8_t *)strnstr((char *)pg->_pbytebuff, "$GNGGA,", sizeof(pg->_pbytebuff));
-    if(nrmc) prmc=nrmc;
+    uint8_t *prmc = (uint8_t *)strnstr((char *)pg->_pbytebuff, "$GNGGA,", sizeof(pg->_pbytebuff));
+    uint8_t *gnrmc = (uint8_t *)strnstr((char *)pg->_pbytebuff, "$GNRMC,", sizeof(pg->_pbytebuff));
+    
+	if(gnrmc)
+    {
+			double speed; // = (float) strtod( (const char *)prmc + u8ixcollector[5],NULL);  //fyi this is a much cleaner way to extract value. quits parsing at comma automatically
+			pg->_time_data.knots = speed/2;
+			get_8th_field_as_float(gnrmc, &speed);
+	}
 	
 	if(prmc)
-    {
-								if ((spGPStimeContext->verbosity>=7)&&(spGPStimeContext->user_setup_menu_active==0 )) 	printf("Found GxGGA len: %d  full buff: %s",sizeof(pg->_pbytebuff),(char *)pg->_pbytebuff);// printf("prmc found: %s\n",(char *)prmc);
+    {			
+																								if ((spGPStimeContext->verbosity>=7)&&(spGPStimeContext->user_setup_menu_active==0 )) 	printf("Found GxGGA len: %d  full buff: %s",sizeof(pg->_pbytebuff),(char *)pg->_pbytebuff);// printf("prmc found: %s\n",(char *)prmc);
 		pg->message_count++;      //valid mesg count
         uint64_t tm_fix = GetUptime64();
         uint8_t u8ixcollector[16] = {0};   //collects locations of commas
@@ -119,8 +153,6 @@ int parse_GPS_data(GPStimeContext *pg)
 				
         pg->_time_data._u8_is_solution_active = (prmc[u8ixcollector[5]]>48);   //numeric 0 for no fix, 1 2 or 3 for various fix types //printf("char is: %c\n",prmc[u8ixcollector[5]]);
 		pg->_time_data.sat_count = atoi((const char *)prmc + u8ixcollector[6]); 
-		float speed = (float) strtod( (const char *)prmc + u8ixcollector[5],NULL);  //fyi this is a much cleaner way to extract value. quits parsing at comma automatically
-		pg->_time_data.knots = speed/2;
 		
 															if ((spGPStimeContext->verbosity>=6)&&(spGPStimeContext->user_setup_menu_active==0 )) printf("sat count: %d\n",pg->_time_data.sat_count);
 
@@ -158,8 +190,7 @@ int parse_GPS_data(GPStimeContext *pg)
 			float f;
 			f = (float)atof((char *)prmc+u8ixcollector[8]);  
 			pg->_altitude=f;    	
-			//pg->_altitude=12500;     //FORCING A SPECIFIC ALTITUDE for debugging		
-		
+			//pg->_altitude=12500;     //FORCING A SPECIFIC ALTITUDE for debugging			
 		  //printf("GPS Latitude:%lld Longtitude:%lld\n", pg->_time_data._i64_lat_100k, pg->_time_data._i64_lon_100k);		
 		
 		}
