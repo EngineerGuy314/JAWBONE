@@ -118,9 +118,9 @@ int parse_GPS_data(GPStimeContext *pg)
     
 	if(gnrmc)
     {
-			double speed; // = (float) strtod( (const char *)prmc + u8ixcollector[5],NULL);  //fyi this is a much cleaner way to extract value. quits parsing at comma automatically
-			pg->_time_data.knots = speed/2;
+			double speed; // = (float) strtod( (const char *)prmc + u8ixcollector[5],NULL);  //fyi this is a much cleaner way to extract value. quits parsing at comma automatically			
 			get_8th_field_as_float(gnrmc, &speed);
+			pg->_time_data.knots = speed/2;
 	}
 	
 	if(prmc)
