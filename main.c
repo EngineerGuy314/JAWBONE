@@ -310,7 +310,7 @@ void process_TELEN_data(void)
 							uint32_t clamped_value=pWSPR->_txSched.seconds_for_lock;							
 							if (clamped_value>599) clamped_value=599;
 							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){clamped_value,600}; 
-							clamped_value=seconds_for_lock_previous;						
+							clamped_value=seconds_for_lock_previous/10;						
 							if (clamped_value>599) clamped_value=599;
 							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){clamped_value,600}; 
 							pWSPR->telem_vals_and_ranges[i][3]=(v_and_r){pWSPR->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count,59};
