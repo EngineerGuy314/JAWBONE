@@ -26,7 +26,6 @@ static int U4B_second_packet_has_started_at_minute;
 static int itx_trigger = 0;
 static int itx_trigger2 = 0;		
 static int forced_xmit_in_process = 0;
-static int transmitter_status = 0;	
 static absolute_time_t start_time;
 static absolute_time_t start_time_of_GPS_search;
 static absolute_time_t time_of_last_serial_packet;
@@ -46,10 +45,15 @@ static absolute_time_t GPS_aquisiion_time;
 static absolute_time_t GPS_loss_time;
 static uint32_t minute_OF_GPS_aquisition;
 static int SEQ;
+static int stale_gps_position;
 static int tikk;
 static char _4_char_version_of_locator[5];
 static int tester;
 static uint32_t OLD_GPS_active_status;
+extern double lat_delta;
+extern double lon_delta;
+static double last_known_good_lat;
+static double last_known_good_lon;
 const int8_t valid_dbm[19] =
     {0, 3, 7, 10, 13, 17, 20, 23, 27, 30, 33, 37, 40,
      43, 47, 50, 53, 57, 60};  
@@ -59,7 +63,7 @@ extern uint32_t XMIT_FREQUENCY_10_METER;
 extern int RFOUT_PIN;
 extern int xmit_count;
 extern int32_t seconds_for_lock_previous;
-
+extern int dead_reckoning;
 
 static void sleep_callback(void) {
     printf("RTC woke us up\n");
@@ -144,8 +148,6 @@ WSPRbeaconContext *WSPRbeaconInit(const char *pcallsign, const char *pgridsquare
     p->_u8_txpower = txpow_dbm;
     p->_pTX = TxChannelInit(682667, 0, RfGen);  			  //bit_period_us Period of data bits, sets up ISR for bit banging WSPR
 	at_least_one_slot_has_elapsed=0;OLD_GPS_active_status=0;
-	transmitter_status=0;   //hmm, this gets set later, but never returns to zero?
-
 	gpio_put(VFO_ENABLE_PIN,1); sleep_ms(1);gpio_put(GPS_ENABLE_PIN,0);      // power on GPS, power off VFO
 
 	for (int i=0;i < 10;i++) schedule[i]=-1;
@@ -225,6 +227,36 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 					seconds_for_lock_previous=pctx->_txSched.seconds_for_lock;
 					pctx->_txSched.seconds_for_lock=absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0;
 				}
+
+			if((is_GPS_active==0)&&((absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0)>120) &&(first_broadcast_of_the_day==0) ) //if no GPS, its NOT first xmit of day, and TWO MINUTES is up, go right to xmit
+				{
+															
+					SEQ=60;  //jump right to 60 (keeps same position/altitude as before)
+					current_minute=(current_minute+2)%10;   //increment current minute!! (btw, this ASSUMES user's TELEM is XX-  you will need to fix this moving forward...) your also only allowing max 120 secs to get gps lock...
+					seconds_for_lock_previous=pctx->_txSched.seconds_for_lock;
+					pctx->_txSched.seconds_for_lock=absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0;
+					dead_reckoning=1;
+
+					double new_lat=lat_delta+last_known_good_lat;
+					double new_lon=lon_delta+last_known_good_lon;
+
+					char ten_char_grid[10];
+					snprintf(ten_char_grid,11,get_mh(new_lat, new_lon, 10));
+					grid7=ten_char_grid[6];
+					grid8=ten_char_grid[7];
+					grid9=ten_char_grid[8];
+					grid10=ten_char_grid[9];
+					strncpy(pctx->_pu8_locator, get_mh(new_lat, new_lon, 10), 6);     //does full 6 char maidenhead 	
+					strncpy(_4_char_version_of_locator, pctx->_pu8_locator, 4);     //only take first 4 chars of locator
+					_4_char_version_of_locator[4]=0;  //add null terminator
+					grid5 = pctx->_pu8_locator[4];  //record the values of grid chars 5 and 6 now, but they won't be used until packet type 2 is created
+					grid6 = pctx->_pu8_locator[5];		
+
+					last_known_good_lat  += lat_delta;  // in case more than one gps period will be missed
+					last_known_good_lon  += lon_delta;
+
+				}
+
 	}
 
 	if (SEQ==40)      //RECORD position    (will keep looping back here until time to xmit)
@@ -238,7 +270,10 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 		pctx->grid9=grid9;
 		pctx->grid10=grid10;		
 		altitude_snapshot=pctx->_pTX->_p_oscillator->_pGPStime->_altitude;     //save the value for later when used in 2nd packet
-		SEQ=50;
+		dead_reckoning=0;
+		SEQ=50;		
+
+	
 	}
 
 	if (SEQ==50)   //check if its time to start a slot transmission   
@@ -248,6 +283,12 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 
 		if((schedule[current_minute]>0)&&(current_second==0))
 			{
+
+				lat_delta= (1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k)-last_known_good_lat;
+				lon_delta= (1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k)-last_known_good_lon;
+				last_known_good_lat  = 1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k;  
+				last_known_good_lon  = 1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k;  
+
 				SEQ=60;											//if time to start a packet
 																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	printf("About to start packet. current mind: %d current sec %d slot time at this minute: %d time since initial GPS lock: %.1f secs\n",current_minute,current_second,schedule[current_minute],absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0);
 	
@@ -282,7 +323,6 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 	{
 																		if (((pctx->_txSched.verbosity>=3)||(pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2)))) printf("\nStarting TX. current minute: %i Schedule Value (packet type): %i\n",current_minute,schedule[current_minute]);
 			pctx->_pTX->_u32_dialfreqhz = XMIT_FREQUENCY;
-			transmitter_status=1;
 			WSPRbeaconCreatePacket(pctx, schedule[current_minute] ); //the schedule determines packet type (1-4 for U4B 1st msg,U4B 2nd msg,Zachtek 1st, Zachtek 2nd)
 			WSPRbeaconSendPacket(pctx); 
 			current_minute=(current_minute+2)%10;   //increment in case we come back around here without re-enabling gps
@@ -315,7 +355,7 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 		{
 				pctx->_txSched.voltage_at_xmit=pctx->_txSched.voltage; //done xmitting so save voltage during xmit
 				SEQ=10;   //turn GPS back on
-				first_broadcast_of_the_day=1; //doing this to make sure if it gets no gps lock before next type1 it will wait for the next time
+				//first_broadcast_of_the_day=1; //doing this to make sure if it gets no gps lock before next type1 it will wait for the next time
 																				if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))printf("no pak next, turning GPS back on. time since initial GPS lock: %.1f secs\n",absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0);			
 		}
 
@@ -399,7 +439,7 @@ int WSPRbeaconCreatePacket(WSPRbeaconContext *pctx,int packet_type)  //1-6.  1: 
 		//uint8_t speedKnotsNum = pctx->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count;   //encoding # of sattelites into knots
         uint8_t speedKnotsNum = pctx->_pTX->_p_oscillator->_pGPStime->_time_data.knots;   //Feb 2026 - going to use knots as intended
 		uint8_t gpsValidNum   = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_is_solution_active;
-        gpsValidNum=1; //changed sept 27 2024. because the traquito site won't show the 6 char grid if this bit is even momentarily off. Anyway, redundant cause sat count is sent as knots
+        gpsValidNum=1; //put back may 4 '26 because wsprtv wont show it right, added dead-reckon bit instead //removed may 2026 //changed sept 27 2024. because the traquito site won't show the 6 char grid if this bit is even momentarily off. Anyway, redundant cause sat count is sent as knots
 		// shift inputs into a big number
         val = 0;
         val *= 90; val += tempCNum;

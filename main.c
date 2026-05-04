@@ -64,7 +64,11 @@ static float tempC=0;
 uint32_t XMIT_FREQUENCY;
 uint32_t XMIT_FREQUENCY_10_METER;  //deprecated
 int xmit_count=0;
+int dead_reckoning;
 int32_t seconds_for_lock_previous=0;
+double lat_delta;
+double lon_delta;
+
 
 const uint32_t freqs[14] =   							//A:LF,B:MF,C:160,D:80,E:60,F:40,G:30,H:20,I:17,J:15,K:12,L:10,M:6,N:2 
     {137500,475700,1838100,3570100,5288700,7040100,10140200,14097100,18106100,21096100,24926100,28126100,50294500,144490500}; 
@@ -314,8 +318,9 @@ void process_TELEN_data(void)
 							if (clamped_value>599) clamped_value=599;
 							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){clamped_value,600}; 
 							pWSPR->telem_vals_and_ranges[i][3]=(v_and_r){pWSPR->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count,59};
-														
-							
+							pWSPR->telem_vals_and_ranges[i][4]=(v_and_r){dead_reckoning,2};
+
+
 							break;
 
 				case 'A': 			//GET testing
