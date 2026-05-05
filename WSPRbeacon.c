@@ -439,7 +439,7 @@ int WSPRbeaconCreatePacket(WSPRbeaconContext *pctx,int packet_type)  //1-6.  1: 
 		//uint8_t speedKnotsNum = pctx->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count;   //encoding # of sattelites into knots
         uint8_t speedKnotsNum = pctx->_pTX->_p_oscillator->_pGPStime->_time_data.knots;   //Feb 2026 - going to use knots as intended
 		uint8_t gpsValidNum   = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_is_solution_active;
-        gpsValidNum=1; //put back may 4 '26 because wsprtv wont show it right, added dead-reckon bit instead //removed may 2026 //changed sept 27 2024. because the traquito site won't show the 6 char grid if this bit is even momentarily off. Anyway, redundant cause sat count is sent as knots
+        //gpsValidNum=1; //removed may 2026 //changed sept 27 2024. because the traquito site won't show the 6 char grid if this bit is even momentarily off. Anyway, redundant cause sat count is sent as knots
 		// shift inputs into a big number
         val = 0;
         val *= 90; val += tempCNum;
