@@ -47,6 +47,7 @@ static uint32_t minute_OF_GPS_aquisition;
 static int SEQ;
 static int stale_gps_position;
 static int tikk;
+static int old_min;
 static char _4_char_version_of_locator[5];
 static int tester;
 static uint32_t OLD_GPS_active_status;
@@ -200,7 +201,7 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 	{
 		gpio_put(VFO_ENABLE_PIN,1);sleep_ms(2);gpio_put(GPS_ENABLE_PIN,0); //VFO off, GPS ON										
 		pctx->_pTX->_p_oscillator->_pGPStime->message_count=0;
-		start_time_of_GPS_search=get_absolute_time();
+		start_time_of_GPS_search=get_absolute_time();		
 		SEQ=20;
 																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	printf("enabling GPS\n");
 	}
@@ -215,102 +216,124 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 			}
 	}
 
-	if (SEQ==30)
+
+	if (SEQ==30)    //if 1st xmit of day, wait here for GPS lock
 	{
-		pctx->_txSched.led_mode = 1;  //GPS serial Comms established,  But NO LOCK  yet
+		pctx->_txSched.led_mode = 1;
+		if (first_broadcast_of_the_day==0)
+		{
+			dead_reckoning=1;
+			SEQ=40;
+		}
+		if (is_GPS_active==1)
+			SEQ = 35;
+		
+	}
 
-			if(is_GPS_active)     //waiting for 3d fix
-				{
-																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	printf("Position Lock received! it took %.1f secs\n",absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0);
-					SEQ=40;
-					pctx->_txSched.led_mode = 2; //gps is locked
+
+	if (SEQ==35)   //got GPS lock (1st xmit of day only), check if time for slot xmit
+	{
+		pctx->_txSched.led_mode = 2;
+		last_known_good_lat=(1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k);
+		last_known_good_lon=(1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k);
+		
+		current_minute = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_last_digit_minutes - '0';  //convert from char to int
+		current_second = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._seconds;
+
+		if((schedule[current_minute]==1)&&(current_second==0))
+			{
+				pctx->_txSched.led_mode = 3;
+				first_broadcast_of_the_day=0;
+				dead_reckoning=0;
+				lat_delta=0;
+				lon_delta=0;
+				SEQ=60;
+						printf("35 bout to jump to 60 current min and sec are %d %d, the sched at that min is %d\n",current_minute,current_second,schedule[current_minute]); //wuz
+
+
+			}
+			else SEQ=30;
+	}
+
+
+	if (SEQ==40)    //checl for GPS valid
+	{
+		if (is_GPS_active==1)
+		{
 					seconds_for_lock_previous=pctx->_txSched.seconds_for_lock;
 					pctx->_txSched.seconds_for_lock=absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0;
-				}
-
-			if((is_GPS_active==0)&&((absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0)>120) &&(first_broadcast_of_the_day==0) ) //if no GPS, its NOT first xmit of day, and TWO MINUTES is up, go right to xmit
-				{
-															
-					SEQ=60;  //jump right to 60 (keeps same position/altitude as before)
-					current_minute=(current_minute+2)%10;   //increment current minute!! (btw, this ASSUMES user's TELEM is XX-  you will need to fix this moving forward...) your also only allowing max 120 secs to get gps lock...
-					seconds_for_lock_previous=pctx->_txSched.seconds_for_lock;
-					pctx->_txSched.seconds_for_lock=absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0;
-					dead_reckoning=1;
-
-					double new_lat=lat_delta+last_known_good_lat;
-					double new_lon=lon_delta+last_known_good_lon;
-
-					char ten_char_grid[10];
-					snprintf(ten_char_grid,11,get_mh(new_lat, new_lon, 10));
-					grid7=ten_char_grid[6];
-					grid8=ten_char_grid[7];
-					grid9=ten_char_grid[8];
-					grid10=ten_char_grid[9];
-					strncpy(pctx->_pu8_locator, get_mh(new_lat, new_lon, 10), 6);     //does full 6 char maidenhead 	
-					strncpy(_4_char_version_of_locator, pctx->_pu8_locator, 4);     //only take first 4 chars of locator
-					_4_char_version_of_locator[4]=0;  //add null terminator
-					grid5 = pctx->_pu8_locator[4];  //record the values of grid chars 5 and 6 now, but they won't be used until packet type 2 is created
-					grid6 = pctx->_pu8_locator[5];		
-
-					last_known_good_lat  += lat_delta;  // in case more than one gps period will be missed
-					last_known_good_lon  += lon_delta;
-
-				}
+					dead_reckoning=0;
+					pctx->_txSched.led_mode = 2;
+					SEQ = 50;
+					printf("40 bout to jump to 50 current min and sec are %d %d, the sched at that min is %d\n",current_minute,current_second,schedule[current_minute]); //wuz
+		}
+		else
+		{
+			pctx->_txSched.led_mode = 1;
+			SEQ = 45;
+		}
 
 	}
 
-	if (SEQ==40)      //RECORD position    (will keep looping back here until time to xmit)
-	{		
-		strncpy(_4_char_version_of_locator, pctx->_pu8_locator, 4);     //only take first 4 chars of locator
-		_4_char_version_of_locator[4]=0;  //add null terminator
-		grid5 = pctx->_pu8_locator[4];  //record the values of grid chars 5 and 6 now, but they won't be used until packet type 2 is created
-		grid6 = pctx->_pu8_locator[5];		
-		pctx->grid7=grid7; //also record snapshot of chars 7 through 10 for extended telem
-		pctx->grid8=grid8;
-		pctx->grid9=grid9;
-		pctx->grid10=grid10;		
-		altitude_snapshot=pctx->_pTX->_p_oscillator->_pGPStime->_altitude;     //save the value for later when used in 2nd packet
-		dead_reckoning=0;
-		SEQ=50;		
 
-	
+	if (SEQ==45)  //check for timeout		
+	{
+		if ((absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0)>120)
+		{
+			last_known_good_lat+=lat_delta;
+			last_known_good_lon+=lon_delta;
+			printf("45 bout to jump to 60 current min and sec are %d %d, the sched at that min is %d\n",current_minute,current_second,schedule[current_minute]); //wuz
+			SEQ=60;
+		}
+		else
+			SEQ = 40;
 	}
 
-	if (SEQ==50)   //check if its time to start a slot transmission   
+
+	if (SEQ==50)  //keep checking GPS positions while waiting for slot (ASSuming gps won't drop at this point). When time for slat, save delta's and last known good positions
 	{
+
 		current_minute = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_last_digit_minutes - '0';  //convert from char to int
 		current_second = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._seconds;
 
 		if((schedule[current_minute]>0)&&(current_second==0))
-			{
-
-				lat_delta= (1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k)-last_known_good_lat;
-				lon_delta= (1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k)-last_known_good_lon;
-				last_known_good_lat  = 1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k;  
-				last_known_good_lon  = 1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k;  
-
-				SEQ=60;											//if time to start a packet
-																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	printf("About to start packet. current mind: %d current sec %d slot time at this minute: %d time since initial GPS lock: %.1f secs\n",current_minute,current_second,schedule[current_minute],absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0);
-	
-			if ((first_broadcast_of_the_day==1)&&(schedule[current_minute]!=1))
-				SEQ=40;   //if its first xmission of the day, dont start broadcasting until we can start with a regulat type 1 packet, otherwise the TELEN wouldnt be decoded anyway
-	
-			}
-			else
-			{
-				SEQ=40;        //if not time yet, jump back to 40 and keep track of changing position
-			}
-		/* removed oct 2025. if gps lock was received, but then lost, screw it and transmit anyway.
-		if(is_GPS_active==0) //check if GPS lock was lost while waiting to start Xmit. if GPS lost go back to waiting
 		{
-																		if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))	printf("* * * ** GPS lock lost while waiting to xmit! returning to state 30!");
-			SEQ=30;
-		}*/
+		
+			lat_delta=(1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k)-last_known_good_lat;
+			lon_delta=(1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k)-last_known_good_lon;
+			last_known_good_lat=(1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k);
+			last_known_good_lon=(1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k);
+
+			printf("50 bout to jump to 60 current min and sec are %d %d, the sched at that min is %d\n",current_minute,current_second,schedule[current_minute]); //wuz
+	
+			SEQ=60;
+		}
+	
+		
 	}
 
 
-	if (SEQ==60) //GPS Off, VFO ON
+
+
+
+	if (SEQ==60) //GPS Off, VFO ON. also convert last known good positions to characters
 	{
+		printf("start seq 60\n"); //wuz
+
+
+    char ten_char_grid[10];
+
+
+	snprintf(ten_char_grid,11,get_mh(last_known_good_lat, last_known_good_lon, 10));
+	snprintf(pctx->_pu8_locator,7,ten_char_grid, 6);
+
+	grid7=ten_char_grid[6];
+	grid8=ten_char_grid[7];
+	grid9=ten_char_grid[8];
+	grid10=ten_char_grid[9];
+
+
+
 		pctx->_txSched.voltage_at_idle=pctx->_txSched.voltage; //save idle voltage
 		start_time= get_absolute_time();  //record start time since GPS will now be off and no more time information
 		gpio_put(GPS_ENABLE_PIN,1); sleep_ms(2);gpio_put(VFO_ENABLE_PIN,0);sleep_ms(2); //VFO ON, GPS off
@@ -438,7 +461,8 @@ int WSPRbeaconCreatePacket(WSPRbeaconContext *pctx,int packet_type)  //1-6.  1: 
  
 		//uint8_t speedKnotsNum = pctx->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count;   //encoding # of sattelites into knots
         uint8_t speedKnotsNum = pctx->_pTX->_p_oscillator->_pGPStime->_time_data.knots;   //Feb 2026 - going to use knots as intended
-		uint8_t gpsValidNum   = pctx->_pTX->_p_oscillator->_pGPStime->_time_data._u8_is_solution_active;
+		uint8_t gpsValidNum=(dead_reckoning==0);
+
         //gpsValidNum=1; //removed may 2026 //changed sept 27 2024. because the traquito site won't show the 6 char grid if this bit is even momentarily off. Anyway, redundant cause sat count is sent as knots
 		// shift inputs into a big number
         val = 0;
