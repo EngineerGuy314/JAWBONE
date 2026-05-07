@@ -320,18 +320,22 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 	{
 		printf("start seq 60\n"); //wuz
 
-
     char ten_char_grid[10];
-
 
 	snprintf(ten_char_grid,11,get_mh(last_known_good_lat, last_known_good_lon, 10));
 	snprintf(pctx->_pu8_locator,7,ten_char_grid, 6);
+	strncpy(_4_char_version_of_locator, pctx->_pu8_locator, 4);     //only take first 4 chars of locator
+	_4_char_version_of_locator[4]=0;  //add null terminator
+	grid5 = pctx->_pu8_locator[4];  //record the values of grid chars 5 and 6 now, but they won't be used until packet type 2 is created
+	grid6 = pctx->_pu8_locator[5];	
 
 	grid7=ten_char_grid[6];
 	grid8=ten_char_grid[7];
 	grid9=ten_char_grid[8];
 	grid10=ten_char_grid[9];
 
+printf("in 60, length of ten_char grid %d contents %s length of pu8 %d contents %s \n",strlen(ten_char_grid),strlen(pctx->_pu8_locator),pctx->_pu8_locator); //wuz
+printf("in 60, the lat lon %lld %lld  \n",last_known_good_lat,last_known_good_lon); //wuz
 
 
 		pctx->_txSched.voltage_at_idle=pctx->_txSched.voltage; //save idle voltage
@@ -395,7 +399,8 @@ int WSPRbeaconCreatePacket(WSPRbeaconContext *pctx,int packet_type)  //1-6.  1: 
 	first_broadcast_of_the_day=0;
 
 	pctx->_u8_txpower =13;               //hardcoded at 13dbM when doing u4b MSG 1
-				if (pctx->_txSched.verbosity>=3){ printf("creating U4B packet 1\n");printf("location for Xmit: %s%c%c%c%c%c%c lat/lon: %lld %lld\n", _4_char_version_of_locator,grid5,grid6,grid7,grid8,grid9,grid10,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k);}				
+				             if (pctx->_txSched.verbosity>=3){ printf("creating U4B packet 1\n");printf("location for Xmit: %s%c%c%c%c%c%c lat/lon: %lld %lld\n", _4_char_version_of_locator,grid5,grid6,grid7,grid8,grid9,grid10,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k);}				
+							  printf("creating U4B packet 1\n");printf("location for Xmit: %s%c%c%c%c%c%c lat/lon: %lld %lld\n", _4_char_version_of_locator,grid5,grid6,grid7,grid8,grid9,grid10,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k); //wuz				
 	wspr_encode(pctx->_pu8_callsign, _4_char_version_of_locator, pctx->_u8_txpower, pctx->_pu8_outbuf, pctx->_txSched.verbosity);   // look in utility.c for wspr_encode
    }
  if (packet_type==2)   // special encoding for 2nd packet of U4B protocol aka "standard" telemetry
