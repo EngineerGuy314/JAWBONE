@@ -174,7 +174,6 @@ else                                       //if we get here, U4B is enabled
 
 
 		for (int i=0;i < 10;i++) 
-			printf("min: %d the sched is: %d\n", i,schedule[i]); //wuz
 
 
 		if (suffix != 253)    // if Suffix enabled, Do zachtek messages 4 mins BEFORE (ie 6 minutes in future) of u4b (because minus (-) after char to decimal conversion is 253)
@@ -249,7 +248,6 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 				lon_delta=0;
 				altitude_snapshot=pctx->_pTX->_p_oscillator->_pGPStime->_altitude;     //save the value for later when used in 2nd packet
 				SEQ=60;
-						printf("35 bout to jump to 60 current min and sec are %d %d, the sched at that min is %d\n",current_minute,current_second,schedule[current_minute]); //wuz
 
 
 			}
@@ -266,7 +264,6 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 					dead_reckoning=0;
 					pctx->_txSched.led_mode = 2;
 					SEQ = 50;
-					printf("40 bout to jump to 50 current min and sec are %d %d, the sched at that min is %d\n",current_minute,current_second,schedule[current_minute]); //wuz
 		}
 		else
 		{
@@ -286,7 +283,6 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 
 			last_known_good_lat+=lat_delta;
 			last_known_good_lon+=lon_delta;
-			printf("45 bout to jump to 60 current min and sec are %d %d, the sched at that min is %d\n",current_minute,current_second,schedule[current_minute]); //wuz
 			current_minute=(current_minute+2)%10;   //increment
 			SEQ=60;
 		}
@@ -308,9 +304,6 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 			lon_delta=(1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k)-last_known_good_lon;
 			last_known_good_lat=(1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k);
 			last_known_good_lon=(1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k);
-
-			printf("50 bout to jump to 60 current min and sec are %d %d, the sched at that min is %d\n",current_minute,current_second,schedule[current_minute]); //wuz
-	
 			SEQ=60;
 		}
 	
@@ -323,7 +316,6 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 
 	if (SEQ==60) //GPS Off, VFO ON. also convert last known good positions to characters
 	{
-		printf("\nXMIT ABOUT to start in 60!, Dreckn is: %d xmit_count: %d current min and sec are %d %d, the sched at that min is %d\n",dead_reckoning,xmit_count,current_minute,current_second,schedule[current_minute]); //wuz
 
     char ten_char_grid[10];
 
@@ -344,9 +336,6 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 	pctx->grid9=grid9;
 	pctx->grid10=grid10;
 
-	printf("in 60, length of ten_char grid %d contents %s length of pu8 %d contents %s \n",strlen(ten_char_grid),ten_char_grid,strlen(pctx->_pu8_locator),pctx->_pu8_locator); //wuz
-	//printf("in 60, the lat lon %f %f  \n",last_known_good_lat,last_known_good_lon); //wuz
-
 
 		pctx->_txSched.voltage_at_idle=pctx->_txSched.voltage; //save idle voltage
 		start_time= get_absolute_time();  //record start time since GPS will now be off and no more time information
@@ -359,7 +348,6 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 	if (SEQ==70) //create and send packet
 	{
 																		if (((pctx->_txSched.verbosity>=3)||(pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2)))) printf("\nStarting TX. current minute: %i Schedule Value (packet type): %i\n",current_minute,schedule[current_minute]);
-		printf("in 70 about to xmit (and AFTER will incre minute) current min and sec are %d %d, the sched at that min is %d\n",current_minute,current_second,schedule[current_minute]); //wuz
 	
 			pctx->_pTX->_u32_dialfreqhz = XMIT_FREQUENCY;
 			WSPRbeaconCreatePacket(pctx, schedule[current_minute] ); //the schedule determines packet type (1-4 for U4B 1st msg,U4B 2nd msg,Zachtek 1st, Zachtek 2nd)
@@ -388,7 +376,6 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 				//start_time = get_absolute_time();     //reset "start_time" so we know when this packet ends
 				start_time = delayed_by_us(start_time, 120000000LL); //reset "start_time" so we know when this packet ends
 				SEQ=70;
-							printf("90 bout to jump to 70 current min and sec are %d %d, the sched at that min is %d\n",current_minute,current_second,schedule[current_minute]); //wuz
 																if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))printf("going to do aother pak immediately\n");
 			}	
 		else
@@ -396,10 +383,8 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 				pctx->_txSched.voltage_at_xmit=pctx->_txSched.voltage; //done xmitting so save voltage during xmit
 				SEQ=10;   //turn GPS back on
 
-							printf("90 bout to jump to 10 current min and sec are %d %d, the sched at that min is %d\n",current_minute,current_second,schedule[current_minute]); //wuz
 
 
-				//first_broadcast_of_the_day=1; //doing this to make sure if it gets no gps lock before next type1 it will wait for the next time
 																				if (pctx->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))printf("no pak next, turning GPS back on. time since initial GPS lock: %.1f secs\n",absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0);			
 		}
 
@@ -417,10 +402,9 @@ int WSPRbeaconCreatePacket(WSPRbeaconContext *pctx,int packet_type)  //1-6.  1: 
 
 	pctx->_u8_txpower =13;               //hardcoded at 13dbM when doing u4b MSG 1
 
-if (dead_reckoning==1) pctx->_u8_txpower =10;                         //wuz ??
+if (dead_reckoning==1) pctx->_u8_txpower =10;                         //send a different power level if dead reckoning. not really needed...
 
 				             if (pctx->_txSched.verbosity>=3){ printf("creating U4B packet 1\n");printf("location for Xmit: %s%c%c%c%c%c%c lat/lon: %lld %lld\n", _4_char_version_of_locator,grid5,grid6,grid7,grid8,grid9,grid10,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k);}				
-							  printf("creating U4B packet 1 ");printf("location for Xmit: %s%c%c%c%c%c%c lat/lon: %lld %lld\n", _4_char_version_of_locator,grid5,grid6,grid7,grid8,grid9,grid10,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k,pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k); //wuz				
 	wspr_encode(pctx->_pu8_callsign, _4_char_version_of_locator, pctx->_u8_txpower, pctx->_pu8_outbuf, pctx->_txSched.verbosity);   // look in utility.c for wspr_encode
    }
  if (packet_type==2)   // special encoding for 2nd packet of U4B protocol aka "standard" telemetry
@@ -623,7 +607,7 @@ int WSPRbeaconSendPacket(const WSPRbeaconContext *pctx)
 ///////////////////////////////////////////////////////////
 /// @brief Dumps the beacon context to stdio.
 /// @param pctx Ptr to Context.
-void misc_dump(const WSPRbeaconContext *pctx)  //called ~ every 5 secs from main.c if option set to 4  wuz
+void misc_dump(const WSPRbeaconContext *pctx)  //called ~ every 5 secs from main.c if option set to 4  
 {
     //const uint64_t u64tmnow = GetUptime64();
     //StampPrintf("__________________");
