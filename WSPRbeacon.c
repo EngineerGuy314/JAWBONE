@@ -281,6 +281,9 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 	{
 		if ((absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0)>120)
 		{
+			seconds_for_lock_previous=pctx->_txSched.seconds_for_lock;
+			pctx->_txSched.seconds_for_lock=absolute_time_diff_us(start_time_of_GPS_search, get_absolute_time())/1000000.0;
+
 			last_known_good_lat+=lat_delta;
 			last_known_good_lon+=lon_delta;
 			printf("45 bout to jump to 60 current min and sec are %d %d, the sched at that min is %d\n",current_minute,current_second,schedule[current_minute]); //wuz
