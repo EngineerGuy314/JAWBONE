@@ -733,7 +733,7 @@ check_data_validity_and_set_defaults(); //added may 2025, will this cause proble
 
 int band_as_int=_band[0]-'A';       
 printf(CLEAR_SCREEN);
-printf("JAWBONE (Just Another Wspr Beacon Of Noisy Electronics) by KC3LBR,  version: %s %s\n\n",__DATE__ ,__TIME__);
+printf("JAWBONE (Just Another Wspr Beacon Of Noisy Electronics) by KC3LBR,  version (new CT_a): %s %s\n\n",__DATE__ ,__TIME__);
 printf(UNDERLINE_ON);printf(BRIGHT);
 printf("\n\nCurrent values:\n");printf(UNDERLINE_OFF);printf(NORMAL);
 
