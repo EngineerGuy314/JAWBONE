@@ -64,7 +64,7 @@ static float tempC=0;
 uint32_t XMIT_FREQUENCY;
 uint32_t XMIT_FREQUENCY_10_METER;  //deprecated
 int xmit_count=0;
-int dead_reckoning;
+int gps_state;
 int32_t seconds_for_lock_previous=0;
 double lat_delta;
 double lon_delta;
@@ -117,7 +117,7 @@ int main()
 	
 	InitPicoPins();			// Sets GPIO pins roles and directions and also ADC for voltage and temperature measurements (NVRAM must be read BEFORE this, otherwise dont know how to map IO)
 	I2C_init();
-    printf("\nThe JAWBONE version: %s %s\nWSPR beacon init...",__DATE__ ,__TIME__);	//messages are sent to USB serial port, 115200 baud
+    printf("\nThe JAWBONE version: %s %s\nWSPR beacon init ..",__DATE__ ,__TIME__);	//messages are sent to USB serial port, 115200 baud
 	int band_as_int=_band[0]-'A';   
 	XMIT_FREQUENCY=freqs[band_as_int];
 	switch(_lane[0])                             //following lines set lane frequencies for u4b operation. The center freuency for Zactkep (wspr 3) xmitions is hard set in WSPRBeacon.c to 14097100UL
@@ -162,27 +162,29 @@ int main()
     {		
 		onewire_read();
 		I2C_read();
+		/* all this stuff redundnat and unneeded
 		if(WSPRbeaconIsGPSsolutionActive(pWB))
 			{
 				char *pgps_qth = WSPRbeaconGetLastQTHLocator(pWB);  //GET MAIDENHEAD       - this code in original fork wasnt working due to error in WSPRbeacon.c
 				if(pgps_qth)
 					strncpy(pWB->_pu8_locator, pgps_qth, 6);     //does full 6 char maidenhead 									 
 			if (pWSPR->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count > pWSPR->_txSched.max_sats_seen_today) pWSPR->_txSched.max_sats_seen_today=pWSPR->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count;
-			}        
-        WSPRbeaconTxScheduler(pWB, YES);   
+			}   */     
+ 
+		WSPRbeaconTxScheduler(pWB, YES);   
                 
-		if (pWB->_txSched.verbosity>=5)
-		{
-				if(0 == ++tick % 20)      //every ~20 secs dumps context.  
-				 WSPRbeaconDumpContext(pWB);
-		}	
+															if (pWB->_txSched.verbosity>=5)
+															{
+																	if(0 == ++tick % 20)      //every ~20 secs dumps context.  
+																	 WSPRbeaconDumpContext(pWB);
+															}	
 
-		if (pWSPR->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))
-				{
-				if(0 == ++tickd % 40)      //every ~5 secs dumps context.  
-				 misc_dump(pWB);
+															if (pWSPR->_pTX->_p_oscillator->_pGPStime->Optional_Debug&(1<<2))
+																	{
+																	if(0 == ++tickd % 40)      //every ~5 secs dumps context.  
+																	 misc_dump(pWB);
 
-				}	
+																	}	
 
 		if (getchar_timeout_us(0)>0)   //looks for input on USB serial port only. Note: getchar_timeout_us(0) returns a -2 (as of sdk 2) if no keypress. But if you force it into a Char type, becomes something else
 			{
@@ -206,21 +208,13 @@ int main()
 		pWB->_txSched.voltage=volts;
 
  		process_TELEN_data();                          //if needed, this puts data into DEXT variables. You can remove this and set the data yourself as shown in the next few lines
-			/*pctx->telem_vals_and_ranges[2][0]=(v_and_r){2,8};  //[slot], specified range (inclusive of zero) and value for each 
-			  pctx->telem_vals_and_ranges[2][1]=(v_and_r){2,3};
-			  pctx->telem_vals_and_ranges[2][2]=(v_and_r){3,2};
-			   .......   */
 				if(0 == ++tick2 % 10)      //every ~5 sec
 				{
 				if (pWB->_txSched.verbosity>=1) StampPrintf("Temp: %0.1f  Volts: %0.1f  Altitude: %0.0f  Satellite count: %d\n", tempU,volts,RfGen._pGPStime->_altitude ,RfGen._pGPStime->_time_data.sat_count);		
-				//if (pWB->_txSched.verbosity>=3) printf("TELEN Vals 1 through 4:  %d %d %d %d\n",telen_values[0],telen_values[1],telen_values[2],telen_values[3]);
 				}
 		
-		//for (int i=0;i < 10;i++) //Implements a pause of total 500ms, and spends it handling LED output
-		//	{
 				handle_LED(pWB->_txSched.led_mode); 
 				sleep_ms(50); 
-			//}
 		DoLogPrint(); 	
 	}
 }
@@ -309,16 +303,13 @@ void process_TELEN_data(void)
 							pWSPR->telem_vals_and_ranges[i][5]=(v_and_r){xmit_count,420}; 			
 							break;
 
-				case '8': 			//"NEWSTYLE" 8 for Generic ET
+				case '8': 			//"NEWSTYLE" 8 for Generic ET (see end for new format as of May 2026)
 							pWSPR->telem_vals_and_ranges[i][0]=(v_and_r){round((float)adc_read() * conversionFactor * 3.0f * 10),600}; 									
-							uint32_t clamped_value=pWSPR->_txSched.seconds_for_lock;							
-							if (clamped_value>599) clamped_value=599;
-							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){clamped_value,600}; 
-							clamped_value=seconds_for_lock_previous/10;						
-							if (clamped_value>599) clamped_value=599;
-							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){clamped_value,600}; 
+							pWSPR->telem_vals_and_ranges[i][1]=(v_and_r){pWSPR->_txSched.seconds_for_lock,6000}; //10X increase
+							pWSPR->telem_vals_and_ranges[i][2]=(v_and_r){(int)(seconds_for_lock_previous/10),60};  //10X DECREASE, because hardly needed anyway..
 							pWSPR->telem_vals_and_ranges[i][3]=(v_and_r){pWSPR->_pTX->_p_oscillator->_pGPStime->_time_data.sat_count,59};
-							pWSPR->telem_vals_and_ranges[i][4]=(v_and_r){dead_reckoning,2};
+							pWSPR->telem_vals_and_ranges[i][4]=(v_and_r){(gps_state==2),2};  //if gps was flaky (in and out) sets the previously-known-as-deadReckoning bit to 1
+							//pWSPR->telem_vals_and_ranges[i][4]=(v_and_r){dead_reckoning,2};
 
 
 							break;
@@ -678,7 +669,7 @@ void check_data_validity_and_set_defaults(void)
 	if ( (atoi(_Optional_Debug)<0) || (atoi(_Optional_Debug)>255)) {strcpy(_Optional_Debug,"0"); _Optional_Debug[1]=0;write_NVRAM();} 
 	if (atoi(_Optional_Debug)==0) {strcpy(_Optional_Debug,"0"); _Optional_Debug[1]=0;}  //this is an anti-stupid in case _Optional_Debug has alpha (non numeric) content. atoi still evalues any alpha as zero, this makes damn sure that if its zero, its really a zero character in the variable. Doesnt do write_NVRAM, because somethig else will prolly do it anyway.
 	if ( (_custom_PCB[0]<'0') || (_custom_PCB[0]>'1')) {_custom_PCB[0]='0'; write_NVRAM();} //set default IO mapping to original Pi Pico configuration
-	if ( (_DEXT_config[0]<'0') || (_DEXT_config[0]>'F')) {strncpy(_DEXT_config,"---",3); write_NVRAM();}
+	if ( (_DEXT_config[0]<'0') || (_DEXT_config[0]>'F')) {strncpy(_DEXT_config,"78-",3); write_NVRAM();}
 	if ( (_battery_mode[0]<'0') || (_battery_mode[0]>'1')) {_battery_mode[0]='0'; write_NVRAM();} //
 	if ( (atoi(_Klock_speed)<5) || (atoi(_Klock_speed)>300)) {strcpy(_Klock_speed,"18"); write_NVRAM();} 
 	if ( (atoi(_U4B_chan)<0) || (atoi(_U4B_chan)>599)) {strcpy(_U4B_chan,"599"); write_NVRAM();} 
@@ -733,7 +724,7 @@ check_data_validity_and_set_defaults(); //added may 2025, will this cause proble
 
 int band_as_int=_band[0]-'A';       
 printf(CLEAR_SCREEN);
-printf("JAWBONE (Just Another Wspr Beacon Of Noisy Electronics) by KC3LBR,  version (new CT_a): %s %s\n\n",__DATE__ ,__TIME__);
+printf("JAWBONE (Just Another Wspr Beacon Of Noisy Electronics) by KC3LBR,  version (new CT may 2026): %s %s\n\n",__DATE__ ,__TIME__);
 printf(UNDERLINE_ON);printf(BRIGHT);
 printf("\n\nCurrent values:\n");printf(UNDERLINE_OFF);printf(NORMAL);
 
@@ -1298,3 +1289,9 @@ vbus,Count,0,500,1,4
 
 
  */
+ 
+ /* as of may 2026, wsprtv format for default telen of 78- :
+   https://wsprtv.com?cs=AB1ABC&ch=XXX&band=20m&start_date=2026-05-16&ct_dec=ct,s:2_240:t100,240:t101,1440:0:1,420:0:1~ct,s:3_600:0:1,6000:0:1,60:0:1,59:0:1,2:0:1&ct_labels=min_since_boot,xmit_count,solar_hv,GPS_aqui,GPS_aqui_prev,sat_cnt,flaky_gps&show_unattached
+ */
+ //previous to  may 2026, but still NEWSTYL CT:
+ //https://wsprtv.com/?cs=AB1ABC&ch=XXX&band=20m&start_date=2026-05-16&ct_dec=ct,s:2_240:t100,240:t101,1440:0:1,420:0:1~ct,s:3_600:0:1,600:0:1,600:0:1,59:0:1,2:0:1&ct_labels=min_since_boot,xmit_count,solar_hv,GPS_aqui,GPS_aqui_prev,sat_cnt,dead_reckon&show_unattached
