@@ -7,7 +7,7 @@
 //  Roman Piksaykin [piksaykin@gmail.com], R2BDY
 //  https://github.com/RPiks/pico-WSPR-tx
 ///////////////////////////////////////////////////////////////////////////////
-//testing branch
+//testing branch, rev2
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
