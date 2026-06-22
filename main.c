@@ -69,7 +69,7 @@ int gps_state;
 int32_t seconds_for_lock_previous=0;
 double lat_delta;
 double lon_delta;
-
+int ii;
 
 const uint32_t freqs[14] =   							//A:LF,B:MF,C:160,D:80,E:60,F:40,G:30,H:20,I:17,J:15,K:12,L:10,M:6,N:2 
     {137500,475700,1838100,3570100,5288700,7040100,10140200,14097100,18106100,21096100,24926100,28126100,50294500,144490500}; 
@@ -83,6 +83,7 @@ int main()
  
 	read_NVRAM();				//reads values of _callsign,  _verbosity etc from NVRAM. MUST READ THESE *BEFORE* InitPicoPins
 	gpio_init(LED_PIN);	gpio_set_dir(LED_PIN, GPIO_OUT); //initialize LED output
+
 	for (int i=0;i < 40;i++)     //do some blinky on startup, allows time for power supply to stabilize before GPS unit enabled, give user chance to interrupt boot
 		{gpio_put(LED_PIN, 1); printf(" %d",(60-i));		
 		 if (getchar_timeout_us(0)>0)   //looks for input on USB serial port only. Note: getchar_timeout_us(0) returns a -2 (as of sdk 2) if no keypress. Must do this check BEFORE setting Clock Speed in Case you bricked it
@@ -519,8 +520,11 @@ show_values();          /* shows current VALUES  AND list of Valid Commands */
 
     for(;;)
 	{	
-																 printf(UNDERLINE_ON);printf(BRIGHT);
+																 printf(UNDERLINE_ON);
 		printf("\nEnter the command (X,C,S,U,B,V,P,T,B,F,O):");printf(UNDERLINE_OFF);printf(NORMAL);	
+		printf(BRIGHT);
+		printf("\nCAREFUL! this is the TESTING BRANCH!!\n");printf(NORMAL);	
+
 		c=getchar_timeout_us(60000000);		   //just in case user setup menu was enterred during flight, this will reboot after 60 secs
 		printf("%c\n", c);
 		if (c==PICO_ERROR_TIMEOUT) {printf(CLEAR_SCREEN);printf("\n\n TIMEOUT WAITING FOR INPUT, REBOOTING FOR YOUR OWN GOOD!\n");sleep_ms(100);watchdog_enable(100, 1);for(;;)	{}}
@@ -829,16 +833,8 @@ void I2C_init(void)
     gpio_pull_up(0);
     gpio_pull_up(1);
 	
-/*   //scanning bus example
-  printf("Scanning I2C bus...\n");
-	uint8_t dummy = 0;
-	for (uint8_t addr = 1; addr < 127; addr++) {
-		int ret = i2c_write_blocking(i2c0, addr, &dummy, 1, false);
-		if (ret >= 0) {
-			printf("Found device at 0x%02X\n", addr);
-		}
-	}
-    printf("Scan complete.\n"); */
+
+
 
 //writing a register example
 /*
@@ -862,12 +858,22 @@ for (uint8_t gar = 1; gar < 50; gar++) {
 	printf("register %d:  %d\n",	config_buf[0],i2c_buf[0]);
 } */
 	
-		//this was used for testing HMC5883L compass module. keeping it here as a template for future I2C use
-   /* i2c_init(i2c_default, 100 * 1000);
-    gpio_set_function(20, GPIO_FUNC_I2C);    //pins 20 and 21 for original Pi PIco  (20 Data, 21 Clk) , Custom PCB will use gpio 0,1 instead
-    gpio_set_function(21, GPIO_FUNC_I2C);
-    gpio_pull_up(20);
-    gpio_pull_up(21);
+		//HMC5883L compass module. 
+    i2c_init(i2c1, 100 * 1000);
+    gpio_set_function(2, GPIO_FUNC_I2C);    //pins 20 and 21 for original Pi PIco  (20 Data, 21 Clk) , Custom PCB will use gpio 0,1 instead
+    gpio_set_function(3, GPIO_FUNC_I2C);
+    gpio_pull_up(2);
+    gpio_pull_up(3);
+
+  printf("Scanning I2C bus...\n");
+	uint8_t dummy = 0;
+	for (uint8_t addr = 1; addr < 127; addr++) {
+		int ret = i2c_write_blocking(i2c1, addr, &dummy, 1, false);
+		if (ret >= 0) {
+			printf("Found device at 0x%02X\n", addr);
+		}
+	}
+    printf("Scan complete.\n"); 
 
 	uint8_t i2c_buf[6];
     uint8_t config_buf[2];
@@ -877,26 +883,32 @@ for (uint8_t gar = 1; gar < 50; gar++) {
 
     config_buf[0] = 0x00; //config register A	
     config_buf[1] =0b00100;  //1.5Hz max update rate
-    i2c_write_blocking(i2c_default, ADDR, config_buf, 2, false);
+    i2c_write_blocking(i2c1, ADDR, config_buf, 2, false);
     config_buf[0] = 0x01; //config register B	
     config_buf[1] =0b00000000;  //max gain
-    i2c_write_blocking(i2c_default, ADDR, config_buf, 2, false);
+    i2c_write_blocking(i2c1, ADDR, config_buf, 2, false);
     config_buf[0] = 0x02; //Mode register
     config_buf[1] =0x00;  //normal mode
-    i2c_write_blocking(i2c_default, ADDR, config_buf, 2, false);
-    printf("Done I2C config \n");
-*/
+    i2c_write_blocking(i2c1, ADDR, config_buf, 2, false);
+    printf("Done I2C config of COMPASS \n");
+
 }
 void I2C_read(void)  //this was used for testing HMC5883L compass module. keeping it here as a template for future I2C use
 {
-	/*
+	uint8_t i2c_buf[6];
+    uint8_t config_buf[2];
+	uint8_t write_config_buf[2];
+	uint8_t reg;
 	write_config_buf[0]=0x3;  											//reg number to start reading at
-	i2c_write_blocking(i2c_default, ADDR, write_config_buf , 1, true);  // send 3 to tell it we about to READ from register 3, and keep Bus control true
-    i2c_read_blocking(i2c_default, ADDR, i2c_buf, 6, false);            //reads six bytes of registers, starting at address you used above
+	i2c_write_blocking(i2c1, ADDR, write_config_buf , 1, true);  // send 3 to tell it we about to READ from register 3, and keep Bus control true
+    i2c_read_blocking(i2c1, ADDR, i2c_buf, 6, false);            //reads six bytes of registers, starting at address you used above
 	int16_t x_result = (int16_t)((i2c_buf[0]<<8)|i2c_buf[1]);           //not bothering with Z axis, because assume sensor board is horizontal
 	int16_t y_result = (int16_t)((i2c_buf[4]<<8)|i2c_buf[5]);
-	printf("X: %d\n Y: %d\n",x_result,y_result);    //to make a useful "compass", you would need to keep track of max/min X,y values, scale them against those limits, take ratio of the two scaled values, and that corresponds to heading. direction (to direction)
-	*/
+	int16_t z_result = (int16_t)((i2c_buf[8]<<8)|i2c_buf[9]);
+	
+	
+	printf("%d,%d,%f,0\n",x_result,y_result,atan2((double)x_result,(double)y_result) * 1800.0 / 3.141592);    //to make a useful "compass", you would need to keep track of max/min X,y values, scale them against those limits, take ratio of the two scaled values, and that corresponds to heading. direction (to direction)
+	
 }
 
 void onewire_read()
