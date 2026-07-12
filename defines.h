@@ -236,7 +236,6 @@ typedef struct
 	uint32_t minutes_since_boot;
 	uint32_t seconds_for_lock;
 	uint32_t max_sats_seen_today;
-	uint8_t low_power_mode;
 
 } WSPRbeaconSchedule;
 
@@ -290,7 +289,7 @@ void dallas_setup(void);
 void datalog_special_functions(void);
 void datalog_loop(void);
 void reboot_now(void);
-void go_to_sleep(void);
+void go_to_sleep(uint32_t minutes);
 void write_to_next_avail_flash(char *text);
 void process_chan_num(void);
 

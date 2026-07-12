@@ -18,11 +18,14 @@
 #include "pico/stdlib.h"
 #include "hardware/watchdog.h"
 #include "hardware/uart.h"
-#include "pico/sleep.h"      
-#include "hardware/rtc.h" 
+#include "pico/sleep.h"
+#include "hardware/rtc.h"
+#include "hardware/structs/scb.h"
+#include "hardware/regs/clocks.h"
 #include "onewire/onewire_library.h"    // onewire library functions
 #include "onewire/ow_rom.h"             // onewire ROM command codes
 #include "onewire/ds18b20.h"            // ds18b20 function codes
+#include "gpslog.h"
 
 
 WSPRbeaconContext *pWSPR;
@@ -34,13 +37,11 @@ char _lane[2];
 char _suffix[2];
 char _verbosity[2];
 char _Optional_Debug[4];
-char _custom_PCB[2];   
-char _DEXT_config[5];     
-char _battery_mode[2];
-char _Klock_speed[4];         
-char _Datalog_mode[2]; 
+char _DEXT_config[5];
+char _Klock_speed[4];
+char _Datalog_mode[2];
+char _Datalog_sleep_minutes[4];   // "1"-"999", minutes between datalog samples
 char _U4B_chan[4];
-char _band_hop[2];
 char _band[2];
 
 
@@ -70,48 +71,85 @@ double lat_delta;
 double lon_delta;
 
 
-const uint32_t freqs[14] =   							//A:LF,B:MF,C:160,D:80,E:60,F:40,G:30,H:20,I:17,J:15,K:12,L:10,M:6,N:2 
-    {137500,475700,1838100,3570100,5288700,7040100,10140200,14097100,18106100,21096100,24926100,28126100,50294500,144490500}; 
+static uint32_t crash_pc = 0;
+static uint32_t crash_lr = 0;
+static int had_crash = 0;
+
+const uint32_t freqs[14] =   							//A:LF,B:MF,C:160,D:80,E:60,F:40,G:30,H:20,I:17,J:15,K:12,L:10,M=6,N:2
+    {137500,475700,1838100,3570100,5288700,7040100,10140200,14097100,18106100,21096100,24926100,28126100,50294500,144490500};
+
+
+void hardfault_handler_c(uint32_t *stack) {
+    watchdog_hw->scratch[0] = 0xDEADBEEF;
+    watchdog_hw->scratch[1] = stack[6]; // PC at time of fault
+    watchdog_hw->scratch[2] = stack[5]; // LR at time of fault
+    watchdog_enable(100, 1);
+    for(;;) {}
+}
+
+__attribute__((naked)) void isr_hardfault(void) {
+    __asm volatile (
+        "movs r0, #4\n"
+        "mov  r1, lr\n"
+        "tst  r0, r1\n"
+        "beq  1f\n"
+        "mrs  r0, psp\n"
+        "b    hardfault_handler_c\n"
+        "1:\n"
+        "mrs  r0, msp\n"
+        "b    hardfault_handler_c\n"
+    );
+}
 
 
 int main()
 {
 	
 	StampPrintf("\n");DoLogPrint(); srand((unsigned int)time(NULL));// needed asap to wake up the USB stdio port (because StampPrintf includes stdio_init_all();). why though?
-	for (int i=0;i < 5;i++) {printf("*");sleep_ms(100);}			
- 
+	for (int i=0;i < 5;i++) {printf("*");sleep_ms(100);}
+
+	if (watchdog_hw->scratch[0] == 0xDEADBEEF) {
+		had_crash = 1;
+		crash_pc  = watchdog_hw->scratch[1];
+		crash_lr  = watchdog_hw->scratch[2];
+		watchdog_hw->scratch[0] = 0;
+	}
+
 	read_NVRAM();				//reads values of _callsign,  _verbosity etc from NVRAM. MUST READ THESE *BEFORE* InitPicoPins
 	gpio_init(LED_PIN);	gpio_set_dir(LED_PIN, GPIO_OUT); //initialize LED output
 	for (int i=0;i < 40;i++)     //do some blinky on startup, allows time for power supply to stabilize before GPS unit enabled, give user chance to interrupt boot
-		{gpio_put(LED_PIN, 1); printf(" %d",(60-i));		
-		 if (getchar_timeout_us(0)>0)   //looks for input on USB serial port only. Note: getchar_timeout_us(0) returns a -2 (as of sdk 2) if no keypress. Must do this check BEFORE setting Clock Speed in Case you bricked it
-				{RfGen._pGPStime->user_setup_menu_active=1;	user_interface();}		
+		{gpio_put(LED_PIN, 1); printf(" %d",(60-i));
+		 if (i == 20 && had_crash)
+				printf("\n*** CRASH DETECTED! PC=0x%08X  LR=0x%08X  (press Z in menu to recall) ***\n", crash_pc, crash_lr);
+		 {int _ch=getchar_timeout_us(0); if (_ch>=0x20 && _ch<=0x7E)   //printable ASCII only — filters spurious CDC control bytes sent by terminal on connect
+				{if (RfGen._pGPStime) RfGen._pGPStime->user_setup_menu_active=1;	user_interface();}}
 					sleep_ms(100);gpio_put(LED_PIN, 0);sleep_ms(100);}
 
-	read_NVRAM();  //redundant, but doing it here to display nvram on screen 
 	if (check_data_validity()==-1)  //if data was bad, breathe LED for 15 seconds and reboot. or if user presses a key enter setup
 		{
 			printf("\nBAD values in NVRAM detected! will reboot in 10 seconds... press any key to enter user-setup menu..\n");
-			fader=0;fade_counter=0;
-					while (getchar_timeout_us(0)==PICO_ERROR_TIMEOUT) //looks for input on USB serial port only @#$%^&!! they changed this function in SDK 2.0!. used to use -1 for no input, now its -2 PICO_ERROR_TIMEOUT
+			fader=0;
+			absolute_time_t _nvram_reboot_at = make_timeout_time_ms(10000);
+					while (getchar_timeout_us(0)==PICO_ERROR_TIMEOUT)
 						{
 							 fader+=1;
 							 if ((fader%5000)>(fader/100))
-								 gpio_put(LED_PIN, 1); 
+								 gpio_put(LED_PIN, 1);
 									else
-								 gpio_put(LED_PIN, 0);	
-							 if (fader>500000) {fader=0;fade_counter+=1;if (fade_counter>15) {watchdog_enable(100, 1);for(;;)	{} }}  //after ~10 secs force a reboot														
-						}	
-				RfGen._pGPStime->user_setup_menu_active=1;	//if we get here, they pressed a button (to interrupt the "breathing" that indicates bad nvram)
-				user_interface();  
+								 gpio_put(LED_PIN, 0);
+							 if (time_reached(_nvram_reboot_at)) { watchdog_enable(100, 1);for(;;) {} }
+						}
+			if (RfGen._pGPStime) RfGen._pGPStime->user_setup_menu_active=1;
+			user_interface();
 		}
 	process_chan_num(); //sets minute/lane/id from chan number. usually redundant at this point, but can't hurt
-	
-	if (getchar_timeout_us(0)>0)   //looks for input on USB serial port only. Note: getchar_timeout_us(0) returns a -2 (as of sdk 2) if no keypress. Must do this check BEFORE setting Clock Speed in Case you bricked it
+
+	{int _ch=getchar_timeout_us(0); if (_ch>=0x20 && _ch<=0x7E)
 		{
-		RfGen._pGPStime->user_setup_menu_active=1;	
-		user_interface();   
+		if (RfGen._pGPStime) RfGen._pGPStime->user_setup_menu_active=1;
+		user_interface();
 		}
+	}
 		
 	set_sys_clock_khz( Main_System_Clock_Speed* 1000, true);
 	
@@ -126,9 +164,22 @@ int main()
 			case '2':XMIT_FREQUENCY-=40;break;
 			case '3':XMIT_FREQUENCY+=40;break;
 			case '4':XMIT_FREQUENCY+=80;break;
-			 
-		}	
-   
+
+		}
+
+	// Datalog mode needs only GPS, ADC, and flash — not the WSPR TX chain.
+	if (_Datalog_mode[0] == '1' || _Datalog_mode[0] == '2') {
+		gpio_put(VFO_ENABLE_PIN, 1);   // VFO off (active-low)
+		gps_power_on();
+		RfGen._pGPStime = GPStimeInitAutobaud();
+		RfGen._pGPStime->Optional_Debug = (uint8_t)atoi(_Optional_Debug);
+		RfGen._pGPStime->user_setup_menu_active = 0;
+		RfGen._pGPStime->verbosity = (uint8_t)_verbosity[0] - '0';
+		sleep_ms(100);
+		datalog_loop();
+		reboot_now();
+	}
+
 	 WSPRbeaconContext *pWB = WSPRbeaconInit(
         _callsign,/** the Callsign. */
         CONFIG_LOCATOR4,/**< the default QTH locator if GPS isn't used. */
@@ -499,21 +550,24 @@ printf(CLEAR_SCREEN);
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 void show_TELEN_msg()
 {
-printf(BRIGHT);
-printf("\n\n\n\n");printf(UNDERLINE_ON);
-printf("GET (Generic Extended Telemetry) CONFIG INSTRUCTIONS:\n\n");printf(UNDERLINE_OFF);
-printf(NORMAL); 
-printf("\n (Generic-ET has supersized DEXT, aka ET0, aka ET)\n\n");
-printf("* There are 3 possible GET values, corresponding to slots 2,3 and 4,\n");
-printf("  (Slots 0 and 1 are used by WSPR Type 1 and U4B Basic Telemetry)\n");
-printf("  GET slot 2 type, GET slot 3 type and DEXT slot 4 type.\n");
-printf("* Enter 3 characters in GET_config. use a '-' (minus) to disable one \n");
-printf("  or more values.\n* example: '---' disables all GET \n");
-printf("* example: '01-' sets GET 2  to type 0, \n  GET 3 to type 1,  disables GET slot 4 \n"); printf(BRIGHT);printf(UNDERLINE_ON);
-printf("\nGET Types:\n\n");printf(UNDERLINE_OFF);printf(NORMAL); 
-printf("-: disabled, 0: minutes since boot, minutes since GPS fix aquired, GPS valid bit and Sat count \n");
-printf("... many more !... \n");
-printf("See the Wiki for full list and range info.\n\n");
+printf(BRIGHT); printf(UNDERLINE_ON);
+printf("\n\nGET (Generic Extended Telemetry) CONFIG:\n"); printf(UNDERLINE_OFF); printf(NORMAL);
+printf("Enter 3 chars for slots 2, 3, 4.  Use '-' to disable a slot.\n");
+printf("Default: '78-'   Example: '78-' = type 7 in slot 2, type 8 in slot 3, slot 4 off.\n\n");
+printf(BRIGHT); printf(UNDERLINE_ON);
+printf("Type  Contents\n"); printf(UNDERLINE_OFF); printf(NORMAL);
+printf(" -    disabled\n");
+printf(" 0    min-since-boot, min-since-GPS-fix, GPS-valid(0/1), sat-count\n");
+printf(" 1    ADC0, ADC1, ADC2  (in 0.1 V units, range 0-3.5 V each)\n");
+printf(" 2    bus-voltage (ADC3, 0-90.0 V), Dallas-1 temp (0-120), sign, sat-count\n");
+printf(" 3    Dallas-1 temp + sign, Dallas-2 temp + sign  (0-120 deg, sign 0=pos)\n");
+printf(" 4    Dallas-3 temp + sign, Dallas-4 temp + sign  (0-120 deg, sign 0=pos)\n");
+printf(" 5    extended Maidenhead chars 7-10, boot-mins/10, GPS-acq-secs/10\n");
+printf("      (MUST be in first slot)\n");
+printf(" 6    idle-voltage*100, TX-voltage*100, boot-mins/10, GPS-acq-secs/40\n");
+printf(" 7    extended Maidenhead chars 7-10, min-since-boot, TX-count\n");
+printf(" 8    solar/bus-voltage, GPS-acq-secs, prev-GPS-acq-secs/10,\n");
+printf("      sat-count, flaky-GPS-flag\n\n");
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 /**
@@ -574,19 +628,17 @@ show_values();          /* shows current VALUES  AND list of Valid Commands */
 */
 			case 'V':get_user_input("Verbosity level (0-9): ", _verbosity, sizeof(_verbosity)); write_NVRAM(); break;
 			case 'O':get_user_input("Optional debug (0-255 bitmapped): ", _Optional_Debug, sizeof(_Optional_Debug)); write_NVRAM(); break;
-//			case 'P':get_user_input("custom Pcb mode (0,1): ", _custom_PCB, sizeof(_custom_PCB)); write_NVRAM(); break;
-			//case 'H':get_user_input("band Hop mode (0,1): ", _band_hop, sizeof(_band_hop)); write_NVRAM(); break;
 			case 'T':show_TELEN_msg();get_user_input("Telemetry (GET) config: ", _DEXT_config, sizeof(_DEXT_config)-1); convertToUpperCase(_DEXT_config); write_NVRAM(); break;
-			//case 'B':get_user_input("Battery mode (0,1): ", _battery_mode, sizeof(_battery_mode)); write_NVRAM(); break;
-			/*case 'D':get_user_input("Data-log mode (0,1,Wipe,Dump): ", _Datalog_mode, sizeof(_Datalog_mode));
+			case 'D':get_user_input("Data-log mode (0=off, 1=circular, 2=stop-full, W=wipe, D=dump): ", _Datalog_mode, sizeof(_Datalog_mode));
 						convertToUpperCase(_Datalog_mode);
-						if ((_Datalog_mode[0]=='D') || (_Datalog_mode[0]=='W') ) 
-								{
-									datalog_special_functions();
-									_Datalog_mode[0]='0';
-								}						 
-							write_NVRAM(); 
-						break;*/
+						if (_Datalog_mode[0]=='D') { gpslog_dump_csv(); _Datalog_mode[0]='0'; }
+						else if (_Datalog_mode[0]=='W') { datalog_special_functions(); _Datalog_mode[0]='0'; }
+						else if (_Datalog_mode[0]=='1' || _Datalog_mode[0]=='2') {
+							get_user_input("Sleep between samples in minutes (1-999): ", _Datalog_sleep_minutes, sizeof(_Datalog_sleep_minutes));
+							if ((atoi(_Datalog_sleep_minutes)<1) || (atoi(_Datalog_sleep_minutes)>999)) strcpy(_Datalog_sleep_minutes,"20");
+						}
+						write_NVRAM();
+						break;
 
 			//case 'K':get_user_input("Klock speed: ", _Klock_speed, sizeof(_Klock_speed)); write_NVRAM(); break;
 			
@@ -616,9 +668,15 @@ show_values();          /* shows current VALUES  AND list of Valid Commands */
 			case '>': {printf("> was pressed");InitPicoPins();gpio_put(GPS_ENABLE_PIN,0);} break;
 			case '?': {printf("? was pressed");InitPicoPins();gpio_put(VFO_ENABLE_PIN,1);gpio_put(GPS_ENABLE_PIN,1);} break;
 			case 'M': {	InitPicoPins();		gpio_put(GPS_ENABLE_PIN,0);		gpio_put(VFO_ENABLE_PIN,0);I2C_init();sleep_ms(2);si5351aSetFrequency(1400000000);} break;*/
+			case 'Z':
+				if (had_crash)
+					printf("\nLast crash: PC=0x%08X  LR=0x%08X\n", crash_pc, crash_lr);
+				else
+					printf("\nNo crash recorded.\n");
+				break;
 			case 13:  break;
 			case 10:  break;
-			default: printf(CLEAR_SCREEN); printf("\nYou pressed: %c - (0x%02x), INVALID choice!! ",c,c);sleep_ms(1000);break;		
+			default: printf(CLEAR_SCREEN); printf("\nYou pressed: %c - (0x%02x), INVALID choice!! ",c,c);sleep_ms(1000);break;
 		}
 		check_data_validity_and_set_defaults();
 		show_values();
@@ -635,7 +693,8 @@ void read_NVRAM(void)
 {
 const uint8_t *flash_target_contents = (const uint8_t *) (XIP_BASE + FLASH_TARGET_OFFSET); //a pointer to a safe place after the program memory
 
-print_buf(flash_target_contents, FLASH_PAGE_SIZE); //256
+if (flash_target_contents[11] >= '1')   // verbosity offset 11; only dump if >= 1
+    print_buf(flash_target_contents, FLASH_PAGE_SIZE); //256
 
 strncpy(_callsign, flash_target_contents, 6);
 strncpy(_id13, flash_target_contents+6, 2);
@@ -644,16 +703,17 @@ strncpy(_lane, flash_target_contents+9, 1);
 strncpy(_suffix, flash_target_contents+10, 1);
 strncpy(_verbosity, flash_target_contents+11, 1);
 //strncpy(_Optional_Debug, flash_target_contents+12, 1); MOVED TO END BNECAUSE IT SBIGGER NOW
-strncpy(_custom_PCB, flash_target_contents+13, 1);
+//offset 13 unused (was custom_PCB, removed)
 strncpy(_DEXT_config, flash_target_contents+14, 4); //only needs 3, kept at 4 for historical ease
-strncpy(_battery_mode, flash_target_contents+18, 1);
+//offset 18 unused (was battery_mode/low_power_mode, removed — '0'=normal '1'=low power)
 strncpy(_Klock_speed, flash_target_contents+19, 3); _Klock_speed[3]=0; //null terminate cause later will use atoi
 Main_System_Clock_Speed = atoi(_Klock_speed);  // was hardcoded for Kazu PLL method at 48
 strncpy(_Datalog_mode, flash_target_contents+22, 1);
 strncpy(_U4B_chan, flash_target_contents+23, 3); _U4B_chan[3]=0; //null terminate cause later will use atoi
-strncpy(_band_hop, flash_target_contents+26, 1);
+//offset 26 unused (was band_hop, removed — '0'=off '1'=auto-rotate bands each TX cycle)
 strncpy(_band, flash_target_contents+27, 1);
-strncpy(_Optional_Debug, flash_target_contents+28, 3);
+strncpy(_Optional_Debug, flash_target_contents+28, 3); _Optional_Debug[3]=0;
+strncpy(_Datalog_sleep_minutes, flash_target_contents+31, 3); _Datalog_sleep_minutes[3]=0;
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -672,15 +732,16 @@ void write_NVRAM(void)
 	strncpy(data_chunk+10,_suffix, 1);
 	strncpy(data_chunk+11,_verbosity, 1);
 	//strncpy(data_chunk+12,_Optional_Debug, 1);  MOVED TO END BECAUSE ITS BIGGER NOW
-	strncpy(data_chunk+13,_custom_PCB, 1);
+	//offset 13 unused (was custom_PCB, removed)
 	strncpy(data_chunk+14,_DEXT_config, 4);  //only needs 3, kept at 4 for historical ease
-	strncpy(data_chunk+18,_battery_mode, 1);
+	//offset 18 unused (was battery_mode, removed)
 	strncpy(data_chunk+19,_Klock_speed, 3);
 	strncpy(data_chunk+22,_Datalog_mode, 1);
 	strncpy(data_chunk+23,_U4B_chan, 3);
-	strncpy(data_chunk+26,_band_hop, 1);
+	//offset 26 unused (was band_hop, removed)
 	strncpy(data_chunk+27,_band, 1);
 	strncpy(data_chunk+28,_Optional_Debug, 3);
+	strncpy(data_chunk+31,_Datalog_sleep_minutes, 3);
 
 	uint32_t ints = save_and_disable_interrupts();
     flash_range_erase(FLASH_TARGET_OFFSET, FLASH_SECTOR_SIZE);  //a "Sector" is 4096 bytes             FLASH_TARGET_OFFSET,FLASH_SECTOR_SIZE,FLASH_PAGE_SIZE = 040000x, 4096, 256
@@ -696,29 +757,24 @@ void write_NVRAM(void)
  */
 void check_data_validity_and_set_defaults(void)
 {
-//do some basic plausibility checking on data, set reasonable defaults if memory was uninitialized							
-	if ( ((_callsign[0]<'A') || (_callsign[0]>'Z')) && ((_callsign[0]<'0') || (_callsign[0]>'9'))    ) {   strncpy(_callsign,"AB1CDE",6);     ; write_NVRAM();} 
+//do some basic plausibility checking on data, set reasonable defaults if memory was uninitialized
+	if ( ((_callsign[0]<'A') || (_callsign[0]>'Z')) && ((_callsign[0]<'0') || (_callsign[0]>'9'))    ) {   strncpy(_callsign,"AB1CDE",6);     ; write_NVRAM();}
 	if ( ((_suffix[0]<'0') || (_suffix[0]>'9')) && (_suffix[0]!='X') ) {_suffix[0]='-'; write_NVRAM();} //by default, disable zachtek suffix
 	if ( (_id13[0]!='0') && (_id13[0]!='1') && (_id13[0]!='Q')&& (_id13[0]!='-')) {strncpy(_id13,"Q0",2); write_NVRAM();}
 	if ( (_start_minute[0]!='0') && (_start_minute[0]!='2') && (_start_minute[0]!='4')&& (_start_minute[0]!='6')&& (_start_minute[0]!='8')) {_start_minute[0]='0'; write_NVRAM();}
 	if ( (_lane[0]!='1') && (_lane[0]!='2') && (_lane[0]!='3')&& (_lane[0]!='4')) {_lane[0]='2'; write_NVRAM();}
 	if ( (_verbosity[0]<'0') || (_verbosity[0]>'9')) {_verbosity[0]='1'; write_NVRAM();} //set default verbosity to 1
-	if ( (atoi(_Optional_Debug)<0) || (atoi(_Optional_Debug)>255)) {strcpy(_Optional_Debug,"0"); _Optional_Debug[1]=0;write_NVRAM();} 
+	if ( (atoi(_Optional_Debug)<0) || (atoi(_Optional_Debug)>255)) {strcpy(_Optional_Debug,"0"); _Optional_Debug[1]=0;write_NVRAM();}
 	if (atoi(_Optional_Debug)==0) {strcpy(_Optional_Debug,"0"); _Optional_Debug[1]=0;}  //this is an anti-stupid in case _Optional_Debug has alpha (non numeric) content. atoi still evalues any alpha as zero, this makes damn sure that if its zero, its really a zero character in the variable. Doesnt do write_NVRAM, because somethig else will prolly do it anyway.
-	if ( (_custom_PCB[0]<'0') || (_custom_PCB[0]>'1')) {_custom_PCB[0]='0'; write_NVRAM();} //set default IO mapping to original Pi Pico configuration
-	if ( (_DEXT_config[0]<'0') || (_DEXT_config[0]>'F')) {strncpy(_DEXT_config,"78-",3); write_NVRAM();}
-	if ( (_battery_mode[0]<'0') || (_battery_mode[0]>'1')) {_battery_mode[0]='0'; write_NVRAM();} //
-	if ( (atoi(_Klock_speed)<5) || (atoi(_Klock_speed)>300)) {strcpy(_Klock_speed,"18"); write_NVRAM();} 
-	if ( (atoi(_U4B_chan)<0) || (atoi(_U4B_chan)>599)) {strcpy(_U4B_chan,"599"); write_NVRAM();} 
-	if ( (_Datalog_mode[0]!='0') && (_Datalog_mode[0]!='1') && (_Datalog_mode[0]!='D') && (_Datalog_mode[0]!='W')) {_Datalog_mode[0]='0'; write_NVRAM();}
-	if ( (_band_hop[0]<'0') || (_band_hop[0]>'1')) {_band_hop[0]='0'; write_NVRAM();} //
-	if ( (_band[0]<'F') || (_band[0]>'M')) {_band[0]='H'; write_NVRAM();} //
+	if ( (_DEXT_config[0]!='-') && ((_DEXT_config[0]<'0') || (_DEXT_config[0]>'F'))) {strncpy(_DEXT_config,"78-",3); write_NVRAM();}
+	if ( (atoi(_Klock_speed)<5) || (atoi(_Klock_speed)>300)) {strcpy(_Klock_speed,"18"); write_NVRAM();}
+	if ( (atoi(_U4B_chan)<0) || (atoi(_U4B_chan)>599)) {strcpy(_U4B_chan,"599"); write_NVRAM();}
+	if ( (_Datalog_mode[0]!='0') && (_Datalog_mode[0]!='1') && (_Datalog_mode[0]!='2') && (_Datalog_mode[0]!='D') && (_Datalog_mode[0]!='W')) {_Datalog_mode[0]='0'; write_NVRAM();}
+	if ( (atoi(_Datalog_sleep_minutes)<1) || (atoi(_Datalog_sleep_minutes)>999)) {strcpy(_Datalog_sleep_minutes,"20"); write_NVRAM();}
+	if ( (_band[0]<'F') || (_band[0]>'M')) {_band[0]='H'; write_NVRAM();}
 
-//certain modes have been hidden. following lines make sure they are not accidentally enabled from data corruption
+//certain modes have been locked out; force safe values regardless of NVRAM content
 strcpy(_Klock_speed,"18");
-_battery_mode[0]='0';
-_Datalog_mode[0]='0';
-_band_hop[0]='0'; 
 _suffix[0]='-';  //removed type-3 (zachtek mode) Dec 202
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -729,24 +785,21 @@ _suffix[0]='-';  //removed type-3 (zachtek mode) Dec 202
  */
 int check_data_validity(void)
 {
-int result=1;	
-//do some basic plausibility checking on data				
-	if ( ((_callsign[0]<'A') || (_callsign[0]>'Z')) && ((_callsign[0]<'0') || (_callsign[0]>'9'))    ) {result=-1;} 
-	if ( ((_suffix[0]<'0') || (_suffix[0]>'9')) && (_suffix[0]!='-') && (_suffix[0]!='X') ) {result=-1;} 
-	if ( (_id13[0]!='0') && (_id13[0]!='1') && (_id13[0]!='Q')&& (_id13[0]!='-')) {result=-1;}
-	if ( (_start_minute[0]!='0') && (_start_minute[0]!='2') && (_start_minute[0]!='4')&& (_start_minute[0]!='6')&& (_start_minute[0]!='8')) {result=-1;}
-	if ( (_lane[0]!='1') && (_lane[0]!='2') && (_lane[0]!='3')&& (_lane[0]!='4')) {result=-1;}
-	if ( (_verbosity[0]<'0') || (_verbosity[0]>'9')) {result=-1;} 
-	if ( (atoi(_Optional_Debug)<0) || (atoi(_Optional_Debug)>255)) {result=-1;} 
-	if ( (_custom_PCB[0]<'0') || (_custom_PCB[0]>'1')) {result=-1;} 
-	if ( ((_DEXT_config[0]<'0') || (_DEXT_config[0]>'F'))&& (_DEXT_config[0]!='-')) {result=-1;}
-	if ( (_battery_mode[0]<'0') || (_battery_mode[0]>'1')) {result=-1;} 	
-	if ( (atoi(_Klock_speed)<5) || (atoi(_Klock_speed)>300)) {result=-1;} 	
-	if ( (_Datalog_mode[0]!='0') && (_Datalog_mode[0]!='1')) {result=-1;}
-	if ( (atoi(_U4B_chan)<0) || (atoi(_U4B_chan)>599)) {result=-1;} 
-	if ( (_band_hop[0]<'0') || (_band_hop[0]>'1')) {result=-1;} 
-	if ( (_band[0]<'F') || (_band[0]>'M')) {result=-1;} 
-
+int result=1;
+//do some basic plausibility checking on data
+	if ( ((_callsign[0]<'A') || (_callsign[0]>'Z')) && ((_callsign[0]<'0') || (_callsign[0]>'9'))    ) { result=-1;}
+	if ( ((_suffix[0]<'0') || (_suffix[0]>'9')) && (_suffix[0]!='-') && (_suffix[0]!='X') ) { result=-1;}
+	if ( (_id13[0]!='0') && (_id13[0]!='1') && (_id13[0]!='Q')&& (_id13[0]!='-')) { result=-1;}
+	if ( (_start_minute[0]!='0') && (_start_minute[0]!='2') && (_start_minute[0]!='4')&& (_start_minute[0]!='6')&& (_start_minute[0]!='8')) { result=-1;}
+	if ( (_lane[0]!='1') && (_lane[0]!='2') && (_lane[0]!='3')&& (_lane[0]!='4')) { result=-1;}
+	if ( (_verbosity[0]<'0') || (_verbosity[0]>'9')) { result=-1;}
+	if ( (atoi(_Optional_Debug)<0) || (atoi(_Optional_Debug)>255)) { result=-1;}
+	if ( ((_DEXT_config[0]<'0') || (_DEXT_config[0]>'F'))&& (_DEXT_config[0]!='-')) { result=-1;}
+	if ( (atoi(_Klock_speed)<5) || (atoi(_Klock_speed)>300)) { result=-1;}
+	if ( (_Datalog_mode[0]!='0') && (_Datalog_mode[0]!='1') && (_Datalog_mode[0]!='2') && (_Datalog_mode[0]!='D') && (_Datalog_mode[0]!='W')) { result=-1;}
+	if ( (atoi(_Datalog_sleep_minutes)<1) || (atoi(_Datalog_sleep_minutes)>999)) { result=-1;}
+	if ( (atoi(_U4B_chan)<0) || (atoi(_U4B_chan)>599)) { result=-1;}
+	if ( (_band[0]<'F') || (_band[0]>'M')) { result=-1;}
 
 return result;
 }
@@ -759,14 +812,12 @@ void show_values(void) /* shows current VALUES  AND list of Valid Commands */
 {
 check_data_validity_and_set_defaults(); //added may 2025, will this cause problems? with fresh out of box pico?
 
-int band_as_int=_band[0]-'A';       
-printf(CLEAR_SCREEN);
+int band_as_int=_band[0]-'A';
 printf("JAWBONE (Just Another Wspr Beacon Of Noisy Electronics) by KC3LBR,  version (new CT may 2026): %s %s\n\n",__DATE__ ,__TIME__);
 printf(UNDERLINE_ON);printf(BRIGHT);
 printf("\n\nCurrent values:\n");printf(UNDERLINE_OFF);printf(NORMAL);
 
 printf("\n\tCallsign:%s\n\t",_callsign);
-//printf("Suffix (zachtek):%s   (please set to '-' if unused)\n\t",_suffix);
 printf("U4b channel:%s",_U4B_chan);
 printf(" (Id13:%s",_id13);
 printf(" Start Minute:%s",_start_minute);
@@ -774,31 +825,29 @@ printf(" Lane:%s)\n\t",_lane);
 printf("Band:%s (%d Hz)\n\t",_band,freqs[band_as_int]);
 printf("Verbosity:%s\n\t",_verbosity);
 printf("Optional debug:%s\n\t",_Optional_Debug);
-//printf("custom Pcb IO mappings:%s\n\t",_custom_PCB);
 printf("Telemetry config:%s   (please set to '---' if unused)\n",_DEXT_config);
-//printf("Klock speed (temp) :%sMhz  \n",_Klock_speed);
-/*printf("Datalog mode:%s\n\t",_Datalog_mode);
-printf("Battery (low power) mode:%s\n\t",_battery_mode);
-printf("secret band Hopping mode:%s\n\n",_band_hop);*/
+{
+    uint32_t gl_used, gl_total;
+    gpslog_stats(&gl_used, &gl_total);
+    printf("Datalog mode:%s  sleep:%s min  [GPS log: %lu / %lu records  (%.0f KB / %.0f KB used)]\n\t",
+           _Datalog_mode, _Datalog_sleep_minutes,
+           (unsigned long)gl_used, (unsigned long)gl_total,
+           (double)gl_used  * GPSLOG_RECORD_BYTES / 1024.0,
+           (double)gl_total * GPSLOG_RECORD_BYTES / 1024.0);
+}
 
 							printf(UNDERLINE_ON);printf(BRIGHT);
 printf("VALID commands: ");printf(UNDERLINE_OFF);printf(NORMAL);
 
 printf("\n\n\tX: eXit configuraiton and reboot\n\tC: change Callsign (6 char max)\n\t");
-//printf("S: change Suffix ( for WSPR3/Zachtek) use '-' to disable WSPR3\n\t");
 printf("U: change U4b channel # (0-599)\n\t");
-printf("B: change Band F:40,G:30,H:20,I:17,J:15,K:12,L:10,M:6\n\t"); 
-/*printf("I: change Id13 (two alpha numeric chars, ie Q8) use '--' to disable U4B\n\t");
-printf("M: change starting Minute (0,2,4,6,8)\n\tL: Lane (1,2,3,4) corresponding to 4 frequencies in 20M band\n\t");*/ //it is still possible to directly change these, but its not shown
+printf("B: change Band F:40,G:30,H:20,I:17,J:15,K:12,L:10,M:6\n\t");
 printf("V: Verbosity level (0 for no messages, 9 for too many) \n\t");
 printf("O: Optional debug functions (bitmapped 0 - 255) \n\t");
-//printf("P: custom Pcb mode IO mappings (0,1)\n\t");
 printf("T: generic extended Telemetry config\n\t");
-//printf("K: Klock speed  \n\t");
-//printf("D: Datalog mode (0,1,(W)ipe memory, (D)ump memory) see wiki\n\t");
-//printf("B: Battery (low power) mode \n\t");
+printf("D: Datalog mode (0=off, 1=circular, 2=stop-full, W=wipe, D=dump)\n\t");
 printf("F: Frequency output (antenna tuning mode)\n\t");
-//printf("H: secret band Hopping mode \n\n");
+printf("Z: show last crash info\n\t");
 
 }
 /**
@@ -1122,56 +1171,95 @@ if ( (length_of_input + found_byte_location)>FLASH_SECTOR_SIZE)  //then need to 
 
 }
 //////////////////////////
-void datalog_loop()          //datalogging is very out of date
+void datalog_loop()
 {
-	char string_to_log[400];
-	absolute_time_t GPS_wait_start_time;
+	const float kADCscale = 3.3f / (1 << 12);
+	absolute_time_t gps_wait_start;
 	uint64_t t;
-	int elapsed_seconds;
 
-				printf("Enterring DATA LOG LOOP. waiting for sat lock or 65 sec max\n");
-				const float conversionFactor = 3.3f / (1 << 12);          //read temperature
-				adc_select_input(4);	
-				float adc = (float)adc_read() * conversionFactor;
-				float tempf =32+(( 27.0f - (adc - 0.706f) / 0.001721f)*(9.0f/5.0f));						
-				adc_select_input(3);  //if setup correctly, ADC3 reads Vsys   // read voltage
-				volts = 3*(float)adc_read() * conversionFactor;  
+	printf("Entering DATA LOG LOOP. Waiting for GPS fix (up to 65 s)...\n");
 
-				GPS_wait_start_time = get_absolute_time();
-	 
-				do
-					{
-						t = absolute_time_diff_us(GPS_wait_start_time, get_absolute_time());	
-										if (getchar_timeout_us(0)>0)   //looks for input on USB serial port only. Note: getchar_timeout_us(0) returns a -2 (as of sdk 2) if no keypress. But if you force it into a Char type, becomes something else
-										{
-											RfGen._pGPStime->user_setup_menu_active=1;	
-											user_interface();   
-										}
-					} 
-				while (( t<450000000ULL )&&(RfGen._pGPStime->_time_data.sat_count<4));               //wait for RfGen._pGPStime->_time_data.sat_coun>4 with 65 second maximum time
-					//set to 450 seconds !!!!!
-				elapsed_seconds= t  / 1000000ULL;
+	adc_select_input(4);
+	float adc       = (float)adc_read() * kADCscale;
+	float temp_c_f  = 27.0f - (adc - 0.706f) / 0.001721f;
 
-				if (RfGen._pGPStime->_time_data.sat_count>=4)
-				{
-				sleep_ms(3000); //even though sat count seen, wait a bit longer
-				sprintf(string_to_log,"latitutde:,%lli,longitude:,%lli,altitude:,%f,sat count:,%d,time:,%s,temp:,%f,bat voltage:,%f,seconds to aquisition:,%d\n",RfGen._pGPStime->_time_data._i64_lon_100k,RfGen._pGPStime->_time_data._i64_lat_100k,RfGen._pGPStime->_altitude,RfGen._pGPStime->_time_data.sat_count,RfGen._pGPStime->_time_data._full_time_string,tempf,volts,elapsed_seconds);
-				write_to_next_avail_flash(string_to_log);
-				printf("GPS data has been logged.\n");
-				}
-					else
-				{
-				sprintf(string_to_log,"no reading, time might be:,%s,temp:,%f,bat voltage:,%f\n",RfGen._pGPStime->_time_data._full_time_string,tempf,volts);
-				write_to_next_avail_flash(string_to_log);
-				printf("NO GPS seen :-(\n");
-				}
+	adc_select_input(3);
+	float v_raw     = 3.0f * (float)adc_read() * kADCscale;
 
-				printf("About to sleep!\n");
-				gpio_set_dir(GPS_ENABLE_PIN, GPIO_IN);  //let the mosfet drive float
+	gps_wait_start = get_absolute_time();
 
+	do {
+		t = absolute_time_diff_us(gps_wait_start, get_absolute_time());
+		int _ch = getchar_timeout_us(0);
+		if (_ch >= 0x20 && _ch <= 0x7E) {
+			RfGen._pGPStime->user_setup_menu_active = 1;
+			user_interface();
+		}
+	} while (t < 65000000ULL && RfGen._pGPStime->_time_data.sat_count < 4);
 
-				go_to_sleep();
+	uint16_t elapsed_s = (uint16_t)(t / 1000000ULL);
+	bool fix_ok = RfGen._pGPStime->_time_data.sat_count >= 4;
 
+	if (fix_ok) {
+		int64_t snap_lat  = RfGen._pGPStime->_time_data._i64_lat_100k;
+		int64_t snap_lon  = RfGen._pGPStime->_time_data._i64_lon_100k;
+		int     snap_sats = RfGen._pGPStime->_time_data.sat_count;
+		absolute_time_t t_start = get_absolute_time();
+		bool confirmed = false;
+
+		while (!confirmed && absolute_time_diff_us(t_start, get_absolute_time()) < 30000000LL) {
+			sleep_ms(3000);
+			int64_t new_lat  = RfGen._pGPStime->_time_data._i64_lat_100k;
+			int64_t new_lon  = RfGen._pGPStime->_time_data._i64_lon_100k;
+			int     new_sats = RfGen._pGPStime->_time_data.sat_count;
+
+			float dlat_m = fabsf((float)(new_lat - snap_lat)) * 0.0111111f;
+			float dlon_m = fabsf((float)(new_lon - snap_lon)) * 0.0111111f * 0.7f;
+			bool moved   = (dlat_m + dlon_m) >= 100.0f;
+			bool sats_up = (new_sats > snap_sats);
+
+			if (!moved && !sats_up) {
+				printf("GPS stable: sats=%d  delta=%.0f m — holding 5 s\n",
+				       new_sats, dlat_m + dlon_m);
+				sleep_ms(5000);
+				confirmed = true;
+			} else {
+				printf("GPS stabilising: sats %d->%d  delta=%.0f m\n",
+				       snap_sats, new_sats, dlat_m + dlon_m);
+				snap_lat  = new_lat;
+				snap_lon  = new_lon;
+				snap_sats = new_sats;
+			}
+		}
+	}
+
+	GpsLogRecord rec;
+	memset(&rec, 0, sizeof(rec));
+	rec.lat_1e5     = (int32_t)RfGen._pGPStime->_time_data._i64_lat_100k;
+	rec.lon_1e5     = (int32_t)RfGen._pGPStime->_time_data._i64_lon_100k;
+	{
+		float alt_offset = RfGen._pGPStime->_altitude + 1000.f;
+		rec.altitude_m = (uint16_t)(alt_offset < 0.f ? 0.f : alt_offset > 65535.f ? 65535.f : alt_offset);
+	}
+	rec.ttf_s       = elapsed_s;
+	rec.hour        = (uint8_t)RfGen._pGPStime->_time_data.hour;
+	rec.minute      = (uint8_t)RfGen._pGPStime->_time_data.minute;
+	rec.second      = RfGen._pGPStime->_time_data._seconds;
+	rec.day         = RfGen._pGPStime->_time_data.day;
+	rec.month       = RfGen._pGPStime->_time_data.month;
+	rec.year        = RfGen._pGPStime->_time_data.year;
+	rec.sats        = (uint8_t)RfGen._pGPStime->_time_data.sat_count;
+	rec.sats_in_view = RfGen._pGPStime->_time_data.sats_in_view;
+	rec.temp_c      = (int8_t)(temp_c_f < -128.f ? -128.f :
+	                            temp_c_f >  127.f ?  127.f : temp_c_f);
+	rec.volt_10ths  = (uint8_t)(v_raw * 10.0f + 0.5f);
+	rec.flags       = fix_ok ? 1u : 0u;
+
+	int mode = _Datalog_mode[0] - '0';   // '1'→1, '2'→2
+	gpslog_append(&rec, mode);
+
+	gpio_set_dir(GPS_ENABLE_PIN, GPIO_IN);   // let mosfet drive float
+	go_to_sleep((uint32_t)atoi(_Datalog_sleep_minutes));
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void reboot_now()
@@ -1179,25 +1267,39 @@ void reboot_now()
 printf("\n\nrebooting...");watchdog_enable(100, 1);for(;;)	{}
 }
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void go_to_sleep()
+static void rtc_sleep_callback(void) {}
+
+void go_to_sleep(uint32_t minutes)
 {
-			/*
-			removing for now because 1) sleep doesnt work with new PLL setup and 2) updated pico-extras caused issues
-			datetime_t t = {.year  = 2020,.month = 01,.day= 01, .dotw= 1,.hour=1,.min= 1,.sec = 00};			
-			rtc_init(); // Start the RTC
-			rtc_set_datetime(&t);
-			uart_default_tx_wait_blocking();
-			datetime_t alarm_time = t;
+    printf("Sleeping for %lu min.\n", (unsigned long)minutes);
+    stdio_flush();
 
-			alarm_time.min += 20;	//sleep for 20 minutes.
-			//alarm_time.sec += 15;
+    sleep_run_from_dormant_source(DORMANT_SOURCE_XOSC);
 
-			gpio_set_irq_enabled(GPS_PPS_PIN, GPIO_IRQ_EDGE_RISE, false); //this is needed to disable IRQ callback on PPS
-			pico_fractional_pll_deinit();  //this is (was?) needed, otherwise causes instant reboot
-			sleep_run_from_dormant_source(DORMANT_SOURCE_ROSC);  //this reduces sleep draw to 2mA! (without this will still sleep, but only at 8mA)
-			sleep_goto_sleep_until(&alarm_time, &sleep_callback);	//blocks here during sleep perfiod
-			{watchdog_enable(100, 1);for(;;)	{} }  //recovering from sleep is messy, so this makes it reboot to get a fresh start
-			*/
+    rtc_init();
+    datetime_t t_now = { .year = 2020, .month = 1, .day = 1, .dotw = 3,
+                         .hour = 0, .min = 0, .sec = 0 };
+    rtc_set_datetime(&t_now);
+    sleep_ms(10);
+
+    datetime_t t_alarm = {
+        .year = 2020, .month = 1, .day = 1, .dotw = 3,
+        .hour = (int8_t)((minutes / 60) % 24),
+        .min  = (int8_t)(minutes % 60),
+        .sec  = 0
+    };
+    rtc_set_alarm(&t_alarm, &rtc_sleep_callback);
+
+    clocks_hw->sleep_en0 = CLOCKS_SLEEP_EN0_CLK_RTC_RTC_BITS;
+    clocks_hw->sleep_en1 = 0;
+
+    scb_hw->scr |= M0PLUS_SCR_SLEEPDEEP_BITS;
+    __wfi();
+    scb_hw->scr &= ~M0PLUS_SCR_SLEEPDEEP_BITS;
+
+    sleep_power_up();
+    watchdog_enable(100, 1);
+    for (;;) {}
 }
 ////////////////////////////////////
 void process_chan_num()   
