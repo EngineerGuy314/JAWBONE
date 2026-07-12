@@ -157,10 +157,11 @@ int main()
 	RfGen._pGPStime->verbosity=(uint8_t)_verbosity[0]-'0';   
     int tick = 0;int tick2 = 0;int tickd = 0;  //used for timing various messages
 	LED_sequence_start_time = get_absolute_time();
-	if (_Datalog_mode[0]=='1') datalog_loop();
-	
+	watchdog_enable(5000, 1);  // 5-second watchdog; must call watchdog_update() in main loop
+
     for(;;)   //loop every ~ half second
     {
+		watchdog_update();
 		if (RfGen._pGPStime->_debug_print_pending) {
 			RfGen._pGPStime->_debug_print_pending = 0;
 			printf("%s", (char*)RfGen._pGPStime->_debug_print_buff);
@@ -215,7 +216,29 @@ int main()
  		process_TELEN_data();                          //if needed, this puts data into DEXT variables. You can remove this and set the data yourself as shown in the next few lines
 				if(0 == ++tick2 % 10)      //every ~5 sec
 				{
-				if (pWB->_txSched.verbosity>=1) StampPrintf("Temp: %0.1f  Volts: %0.1f  Altitude: %0.0f  Satellite count: %d\n", tempU,volts,RfGen._pGPStime->_altitude ,RfGen._pGPStime->_time_data.sat_count);		
+				if (pWB->_txSched.verbosity>=1) {
+					double _lat = 1e-7 * (double)RfGen._pGPStime->_time_data._i64_lat_100k;
+					double _lon = 1e-7 * (double)RfGen._pGPStime->_time_data._i64_lon_100k;
+					char ow_buf[48] = "";
+					if (number_of_onewire_devs > 0) {
+						int pos = snprintf(ow_buf, sizeof(ow_buf), "(");
+						for (int _i = 0; _i < number_of_onewire_devs && pos < (int)sizeof(ow_buf)-2; _i++)
+							pos += snprintf(ow_buf+pos, sizeof(ow_buf)-pos, "%s%0.1f", _i?",":"", onewire_values[_i]);
+						snprintf(ow_buf+pos, sizeof(ow_buf)-pos, ")");
+					}
+					char tx_status[48];
+					WSPRbeaconGetTxStatus(pWB, tx_status, sizeof(tx_status));
+					GPStimeData *_gtd = &RfGen._pGPStime->_time_data;
+					char sat_buf[64];
+					snprintf(sat_buf, sizeof(sat_buf), "%d used / %d view [GP:%d GL:%d GA:%d GB:%d QZ:%d]",
+					         _gtd->sat_count, _gtd->sats_in_view,
+					         _gtd->sats_gps, _gtd->sats_glonass,
+					         _gtd->sats_galileo, _gtd->sats_beidou, _gtd->sats_qzss);
+					StampPrintf("Temp: %0.1f%s  Volts: %0.1f  Alt: %0.0f  Sats: %s  Lat: %0.4f  Lon: %0.4f  Grid: %s  %s\n",
+						tempU, ow_buf, volts, RfGen._pGPStime->_altitude, sat_buf,
+						_lat, _lon,
+						_gtd->_u8_is_solution_active ? get_mh(_lat, _lon, 6) : "------",
+						tx_status);
 				}
 		
 				handle_LED(pWB->_txSched.led_mode); 
@@ -522,10 +545,18 @@ printf(CLEAR_SCREEN);
 show_values();          /* shows current VALUES  AND list of Valid Commands */
 
     for(;;)
-	{	
-																 printf(UNDERLINE_ON);printf(BRIGHT);
-		printf("\nEnter the command (X,C,S,U,B,V,P,T,B,F,O):");printf(UNDERLINE_OFF);printf(NORMAL);	
-		c=getchar_timeout_us(60000000);		   //just in case user setup menu was enterred during flight, this will reboot after 60 secs
+	{
+		printf(UNDERLINE_ON);printf(BRIGHT);
+		printf("\nEnter the command (X,C,S,U,B,V,T,F,O,Z):");printf(UNDERLINE_OFF);printf(NORMAL);
+		{
+			absolute_time_t _menu_deadline = make_timeout_time_ms(60000);
+			c = PICO_ERROR_TIMEOUT;
+			while (!time_reached(_menu_deadline)) {
+				watchdog_update();
+				c = getchar_timeout_us(1000000);
+				if (c != PICO_ERROR_TIMEOUT) break;
+			}
+		}
 		printf("%c\n", c);
 		if (c==PICO_ERROR_TIMEOUT) {printf(CLEAR_SCREEN);printf("\n\n TIMEOUT WAITING FOR INPUT, REBOOTING FOR YOUR OWN GOOD!\n");sleep_ms(100);watchdog_enable(100, 1);for(;;)	{}}
 		if (c>90) c-=32; //make it capital either way
@@ -573,7 +604,8 @@ show_values();          /* shows current VALUES  AND list of Valid Commands */
 					I2C_init();sleep_ms(2);
 					printf("Generating %f Hz.   Press any key to stop. \n", frequency);
 					si5351aSetFrequency((uint64_t)(frequency*(uint64_t)100));
-					c=getchar();c=getchar();
+					do { watchdog_update(); c = getchar_timeout_us(1000000); } while (c == PICO_ERROR_TIMEOUT);
+					getchar_timeout_us(10000); // drain possible CR/LF pair
 					si5351_stop();				
 					gpio_put(VFO_ENABLE_PIN,1);  //turns off VFO										
 					break;

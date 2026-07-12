@@ -6,6 +6,7 @@
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
+#include "hardware/watchdog.h"
 #include "hardware/adc.h"   
 #define BUFFER_SIZE 256
 
@@ -24,6 +25,7 @@ void get_user_input(const char *prompt, char *input_variable, int max_length) {
     fflush(stdout);
 
     while (1) {
+        watchdog_update();
         ch = getchar();
         if (ch == '\n' || ch == '\r') {  // Enter key pressed
             break;
@@ -43,6 +45,23 @@ void get_user_input(const char *prompt, char *input_variable, int max_length) {
 
     input_variable[index] = '\0';  // Null-terminate the string
     printf("\n");
+}
+
+void gps_power_on(void)
+{
+    // Under some circumstances, the GPS inrush current resets the board.
+    // Weak pull-down for 10ms: the internal ~50kΩ resistor slowly pulls the
+    // MOSFET gate low, limiting the rate at which it opens and spreading the
+    // GPS module inrush over time. Pin stays as input — no strong drive yet.
+    gpio_set_dir(GPS_ENABLE_PIN, GPIO_IN);
+    gpio_pull_down(GPS_ENABLE_PIN);
+
+    sleep_ms(10);
+
+    // Now fully assert: strong output low locks the MOSFET fully on.
+    gpio_disable_pulls(GPS_ENABLE_PIN);
+    gpio_put(GPS_ENABLE_PIN, 0);
+    gpio_set_dir(GPS_ENABLE_PIN, GPIO_OUT);
 }
 
 /*                                              -- hardcoded at 48Mhz for Kazu's PLL
@@ -994,6 +1013,35 @@ char letterize(int x) {
     return (char) x + 65;  
 	else
 	return (char) 23 + 65; /*KC3LBR 07/23/24   an alternate/redundant fix to the one below, this clamps the returned characters at 'X' or lower. The original code sometimes returned a Y for 5th or 6 char, which is invalid*/
+}
+
+/* 4-char Maidenhead squares where transmission is forbidden.
+   Each entry covers ~2deg lon x 1deg lat.  Add entries as needed. */
+static const char *forbidden_grids[] = {
+    /* Yemen: lat 12-19N, lon 42-55E */
+    "LK12","LK13","LK14","LK15","LK16","LK17","LK18","LK19",
+    "LK22","LK23","LK24","LK25","LK26","LK27","LK28","LK29",
+    "LK32","LK33","LK34","LK35","LK36","LK37","LK38","LK39",
+    "LK42","LK43","LK44","LK45","LK46","LK47","LK48","LK49",
+    "LK52","LK53","LK54","LK55","LK56","LK57","LK58","LK59",
+    "LK62","LK63","LK64","LK65","LK66","LK67","LK68","LK69",
+    "LK72","LK73","LK74","LK75","LK76","LK77","LK78","LK79",
+    /* North Korea: lat 37.7-42.5N, lon 124.2-130.6E */
+    "PM27","PM28","PM29","PM37","PM38","PM39",
+    "PM47","PM48","PM49","PM57","PM58","PM59",
+    "PN20","PN21","PN22","PN30","PN31","PN32",
+    "PN40","PN41","PN42","PN50","PN51","PN52",
+    NULL
+};
+
+int is_position_geofenced(double lat, double lon) {
+    char grid4[5];
+    strncpy(grid4, get_mh(lat, lon, 4), 4);
+    grid4[4] = '\0';
+    for (int i = 0; forbidden_grids[i] != NULL; i++) {
+        if (strncmp(grid4, forbidden_grids[i], 4) == 0) return 1;
+    }
+    return 0;
 }
 
 char* get_mh(double lat, double lon, int size) {

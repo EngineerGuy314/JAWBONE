@@ -129,6 +129,7 @@
 #include <ctype.h>
 #include <math.h>
 #include "hardware/i2c.h"
+#include "pico/bootrom.h"
 
 		
 ////////////    Data type definition /////////////////////////////
@@ -306,6 +307,7 @@ void Core1Entry(void);
 //maidenhead
 
 char* get_mh(double lat, double lon, int size);
+int is_position_geofenced(double lat, double lon);
 char* complete_mh(char* locator);
 double mh2lon(char* locator);
 double mh2lat(char* locator);
@@ -313,6 +315,7 @@ double mh2lat(char* locator);
 //utilitieas
 
 void get_user_input(const char *prompt, char *input_variable, int max_length);
+void gps_power_on(void);
 
 //nhash
 
@@ -361,6 +364,7 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose);
 void WSPRbeaconDumpContext(const WSPRbeaconContext *pctx);
 void misc_dump(const WSPRbeaconContext *pctx);
 char *WSPRbeaconGetLastQTHLocator(WSPRbeaconContext *pctx);
+void WSPRbeaconGetTxStatus(const WSPRbeaconContext *pctx, char *buf, int size);
 uint8_t WSPRbeaconIsGPSsolutionActive(const WSPRbeaconContext *pctx);
 void encode_telen(uint32_t telen_val1,uint32_t telen_val2,char * telen_chars,uint8_t * telen_power, uint8_t packet_type);  
 void encode_telen2(uint32_t telen_val1,uint32_t telen_val2,char * telen_chars,uint8_t * telen_power, uint8_t packet_type);  
