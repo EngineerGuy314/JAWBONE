@@ -150,7 +150,14 @@ typedef struct
 	uint32_t knots;
 	uint32_t minute;
     int64_t _i64_lat_100k, _i64_lon_100k;       /* The lat, lon, degrees, multiplied by 1e5. */
-	
+    uint8_t day, month, year;                    /* UTC date from RMC sentence (year = 2-digit, e.g. 25 = 2025) */
+    uint8_t sats_gps;       /* sats in view per constellation, from GSV sentences */
+    uint8_t sats_glonass;
+    uint8_t sats_galileo;
+    uint8_t sats_beidou;
+    uint8_t sats_qzss;
+    uint8_t sats_in_view;   /* sum of all constellation sats in view */
+
 } GPStimeData;
 
 typedef struct
@@ -173,6 +180,10 @@ typedef struct
     int8_t Optional_Debug;
     uint32_t message_count;   //#valid GPS serial messages          		/* number of text bursts from GPS mod. */
 
+    volatile uint8_t _debug_print_pending;
+    uint8_t _debug_print_buff[256];
+
+    uint32_t _framing_errors;   /* incremented by ISR on UART framing error (wrong baud) */
 
 } GPStimeContext;
 
@@ -365,6 +376,7 @@ void si5351_stop();
 // GPS TIME
 
 GPStimeContext *GPStimeInit(int uart_baud);
+GPStimeContext *GPStimeInitAutobaud(void);
 void GPStimeDestroy(GPStimeContext **pp);
 int parse_GPS_data(GPStimeContext *pg);
 void RAM (GPStimeUartRxIsr)();

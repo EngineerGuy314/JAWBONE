@@ -148,9 +148,10 @@ int main()
 	pWB->_txSched.verbosity=(uint8_t)_verbosity[0]-'0';       /**< convert ASCI digit to int  */
 	pWB->_txSched.suffix=(uint8_t)_suffix[0]-'0';    /**< convert ASCI digit to int (value 253 if dash was entered) */
 	pWB->_txSched.Optional_Debug=(uint8_t)atoi(_Optional_Debug);
-	RfGen._pGPStime = GPStimeInit(9600); 
+	sleep_ms(100);
+	RfGen._pGPStime = GPStimeInitAutobaud();
+	sleep_ms(100);
 	RfGen._pGPStime->Optional_Debug=(uint8_t)atoi(_Optional_Debug);
-	pWB->_txSched.low_power_mode=(uint8_t)_battery_mode[0]-'0';
 	strcpy(pWB->_txSched.id13,_id13);
 	RfGen._pGPStime->user_setup_menu_active=0;
 	RfGen._pGPStime->verbosity=(uint8_t)_verbosity[0]-'0';   
@@ -159,7 +160,11 @@ int main()
 	if (_Datalog_mode[0]=='1') datalog_loop();
 	
     for(;;)   //loop every ~ half second
-    {		
+    {
+		if (RfGen._pGPStime->_debug_print_pending) {
+			RfGen._pGPStime->_debug_print_pending = 0;
+			printf("%s", (char*)RfGen._pGPStime->_debug_print_buff);
+		}
 		onewire_read();
 		I2C_read();
 		/* all this stuff redundnat and unneeded
