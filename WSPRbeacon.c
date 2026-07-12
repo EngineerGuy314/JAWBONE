@@ -135,7 +135,8 @@ WSPRbeaconContext *WSPRbeaconInit(const char *pcallsign, const char *pgridsquare
     p->_u8_txpower = txpow_dbm;
     p->_pTX = TxChannelInit(682667, 0, RfGen);  			  //bit_period_us Period of data bits, sets up ISR for bit banging WSPR
 	OLD_GPS_active_status=0;
-	gpio_put(VFO_ENABLE_PIN,1); sleep_ms(1);gpio_put(GPS_ENABLE_PIN,0);      // power on GPS, power off VFO
+	gpio_put(VFO_ENABLE_PIN,1);
+	gps_power_on();  // throttles CPU to 12MHz during GPS inrush, restores afterwards
 
 	for (int i=0;i < 10;i++) schedule[i]=-1;
 	p->_txSched.minutes_since_boot=0;
@@ -187,7 +188,8 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 	
 	if (SEQ==10)
 	{
-		gpio_put(VFO_ENABLE_PIN,1);sleep_ms(2);gpio_put(GPS_ENABLE_PIN,0); //VFO off, GPS ON										
+		gpio_put(VFO_ENABLE_PIN,1);
+		gps_power_on();  // throttles CPU to 12MHz during GPS inrush, restores afterwards
 		pctx->_pTX->_p_oscillator->_pGPStime->message_count=0;
 		start_time_of_GPS_search=get_absolute_time();		
 		SEQ=20;
@@ -271,9 +273,16 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose)   // called ever
 		//if((schedule[current_minute]>0)&&(current_second==0))
 		  if((schedule[current_minute]==1)&&(current_second==0)) //changed so won't start xmitting until the beginning of slot 1 (in case it took more than 120 secs for lock)
 		{
-			SEQ=60;
+			double _geo_lat = 1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lat_100k;
+			double _geo_lon = 1e-7 * (double)pctx->_pTX->_p_oscillator->_pGPStime->_time_data._i64_lon_100k;
+			if (is_position_geofenced(_geo_lat, _geo_lon)) {
+				printf("TX suppressed: restricted airspace (%s)\n", get_mh(_geo_lat, _geo_lon, 4));
+				SEQ=40;
+			} else {
+				SEQ=60;
+			}
 		}
-		else SEQ=40;  //jump back to check if GPS got lost			
+		else SEQ=40;  //jump back to check if GPS got lost
 	}
 
 	if (SEQ==60) //GPS Off, VFO ON. also convert last known good positions to characters
@@ -618,6 +627,40 @@ char *WSPRbeaconGetLastQTHLocator(WSPRbeaconContext *pctx)                   //c
 	grid10=ten_char_grid[9];
 //	printf("chars 6 through 10: %d %d %d %d\n",pctx->grid7,pctx->grid8,pctx->grid9,pctx->grid10);
 	return get_mh(lat, lon, 6);
+}
+
+void WSPRbeaconGetTxStatus(const WSPRbeaconContext *pctx, char *buf, int size) {
+    const GPStimeContext *gps = pctx->_pTX->_p_oscillator->_pGPStime;
+
+    if (SEQ <= 20) {
+        snprintf(buf, size, "No GPS comms");
+        return;
+    }
+    if (SEQ >= 60) {
+        int elapsed = (int)(absolute_time_diff_us(start_time, get_absolute_time()) / 1000000ULL);
+        if (elapsed < 0)   elapsed = 0;
+        if (elapsed > 120) elapsed = 120;
+        snprintf(buf, size, "TX %ds/110s %d/162sym", elapsed, pctx->_pTX->_ix_output);
+        return;
+    }
+    /* SEQ 30-50: GPS search or locked, waiting for slot */
+    if (!gps->_time_data._u8_is_solution_active) {
+        snprintf(buf, size, SEQ == 30 ? "Waiting for first GPS lock" : "No GPS fix");
+        return;
+    }
+    /* GPS active — compute seconds to next TX cycle start.
+       The scheduler only triggers a new cycle when schedule[m]==1
+       (first U4B packet); slots 2-7 chain automatically inside that burst. */
+    int min  = (gps->_time_data._u8_last_digit_minutes - '0') % 10;
+    int sec  = (int)gps->_time_data._seconds % 60;
+    for (int step = 1; step <= 10; step++) {
+        if (schedule[(min + step) % 10] == 1) {
+            int secs = step * 60 - sec;
+            snprintf(buf, size, "Next TX: %dm%02ds", secs / 60, secs % 60);
+            return;
+        }
+    }
+    snprintf(buf, size, "No TX scheduled");
 }
 
 uint8_t WSPRbeaconIsGPSsolutionActive(const WSPRbeaconContext *pctx)

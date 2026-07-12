@@ -31,7 +31,8 @@ target_sources(JAWBONE PUBLIC
                ${CMAKE_CURRENT_LIST_DIR}/TxChannel.c
                ${CMAKE_CURRENT_LIST_DIR}/WSPRbeacon.c
                ${CMAKE_CURRENT_LIST_DIR}/onewire/onewire_library.c  
-               ${CMAKE_CURRENT_LIST_DIR}/main.c 
+               ${CMAKE_CURRENT_LIST_DIR}/gpslog.c
+               ${CMAKE_CURRENT_LIST_DIR}/main.c
 
               )
 ######## #include "defines.h"
@@ -59,6 +60,7 @@ target_link_libraries(JAWBONE
 					  hardware_sync
 					  hardware_i2c
 					  hardware_sleep
+					  hardware_rtc
 				      hardware_exception
 					  hardware_pwm
 					  hardware_irq

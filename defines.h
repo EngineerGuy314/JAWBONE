@@ -129,6 +129,7 @@
 #include <ctype.h>
 #include <math.h>
 #include "hardware/i2c.h"
+#include "pico/bootrom.h"
 
 		
 ////////////    Data type definition /////////////////////////////
@@ -150,7 +151,14 @@ typedef struct
 	uint32_t knots;
 	uint32_t minute;
     int64_t _i64_lat_100k, _i64_lon_100k;       /* The lat, lon, degrees, multiplied by 1e5. */
-	
+    uint8_t day, month, year;                    /* UTC date from RMC sentence (year = 2-digit, e.g. 25 = 2025) */
+    uint8_t sats_gps;       /* sats in view per constellation, from GSV sentences */
+    uint8_t sats_glonass;
+    uint8_t sats_galileo;
+    uint8_t sats_beidou;
+    uint8_t sats_qzss;
+    uint8_t sats_in_view;   /* sum of all constellation sats in view */
+
 } GPStimeData;
 
 typedef struct
@@ -173,6 +181,10 @@ typedef struct
     int8_t Optional_Debug;
     uint32_t message_count;   //#valid GPS serial messages          		/* number of text bursts from GPS mod. */
 
+    volatile uint8_t _debug_print_pending;
+    uint8_t _debug_print_buff[256];
+
+    uint32_t _framing_errors;   /* incremented by ISR on UART framing error (wrong baud) */
 
 } GPStimeContext;
 
@@ -224,7 +236,6 @@ typedef struct
 	uint32_t minutes_since_boot;
 	uint32_t seconds_for_lock;
 	uint32_t max_sats_seen_today;
-	uint8_t low_power_mode;
 
 } WSPRbeaconSchedule;
 
@@ -278,7 +289,7 @@ void dallas_setup(void);
 void datalog_special_functions(void);
 void datalog_loop(void);
 void reboot_now(void);
-void go_to_sleep(void);
+void go_to_sleep(uint32_t minutes);
 void write_to_next_avail_flash(char *text);
 void process_chan_num(void);
 
@@ -295,6 +306,7 @@ void Core1Entry(void);
 //maidenhead
 
 char* get_mh(double lat, double lon, int size);
+int is_position_geofenced(double lat, double lon);
 char* complete_mh(char* locator);
 double mh2lon(char* locator);
 double mh2lat(char* locator);
@@ -302,6 +314,7 @@ double mh2lat(char* locator);
 //utilitieas
 
 void get_user_input(const char *prompt, char *input_variable, int max_length);
+void gps_power_on(void);
 
 //nhash
 
@@ -350,6 +363,7 @@ int WSPRbeaconTxScheduler(WSPRbeaconContext *pctx, int verbose);
 void WSPRbeaconDumpContext(const WSPRbeaconContext *pctx);
 void misc_dump(const WSPRbeaconContext *pctx);
 char *WSPRbeaconGetLastQTHLocator(WSPRbeaconContext *pctx);
+void WSPRbeaconGetTxStatus(const WSPRbeaconContext *pctx, char *buf, int size);
 uint8_t WSPRbeaconIsGPSsolutionActive(const WSPRbeaconContext *pctx);
 void encode_telen(uint32_t telen_val1,uint32_t telen_val2,char * telen_chars,uint8_t * telen_power, uint8_t packet_type);  
 void encode_telen2(uint32_t telen_val1,uint32_t telen_val2,char * telen_chars,uint8_t * telen_power, uint8_t packet_type);  
@@ -365,6 +379,7 @@ void si5351_stop();
 // GPS TIME
 
 GPStimeContext *GPStimeInit(int uart_baud);
+GPStimeContext *GPStimeInitAutobaud(void);
 void GPStimeDestroy(GPStimeContext **pp);
 int parse_GPS_data(GPStimeContext *pg);
 void RAM (GPStimeUartRxIsr)();

@@ -32,12 +32,47 @@ GPStimeContext *GPStimeInit(int uart_baud)
     spGPStimeData = &pgt->_time_data;
     uart_set_hw_flow(uart1, false, false);
     uart_set_format(uart1, 8, 1, UART_PARITY_NONE);
-    uart_set_fifo_enabled(uart1, false);  //this turns off the internal FIFO and makes chars come in one at a time
+    uart_set_fifo_enabled(uart1, true);   // 32-byte RX FIFO buffers bytes while parse_GPS_data runs in the ISR
     irq_set_exclusive_handler(UART1_IRQ, GPStimeUartRxIsr);
     irq_set_enabled(UART1_IRQ, true);
     uart_set_irq_enables(uart1, true, false);
-	
+
 	return pgt;
+}
+
+GPStimeContext *GPStimeInitAutobaud(void)
+{
+    static const int bauds[] = {9600, 115200};
+    int idx = 0;
+    GPStimeContext *pg = GPStimeInit(bauds[0]);
+
+    for (;;) {
+        int baud = bauds[idx];
+        printf("GPS autobaud: trying %d\n", baud);
+
+        absolute_time_t deadline = make_timeout_time_ms(5000);
+        while (!time_reached(deadline)) {
+            sleep_ms(500);
+            if (pg->_pbytebuff[0] == '$') {
+                printf("GPS: locked at %d baud\n", baud);
+                return pg;
+            }
+        }
+
+        // No valid NMEA in 5 s — switch to the other baud rate.
+        idx = 1 - idx;
+        int next_baud = bauds[idx];
+        irq_set_enabled(UART1_IRQ, false);
+        uart_set_baudrate(uart1, next_baud);
+        while (uart_is_readable(uart1))          // drain stale FIFO bytes
+            (void)uart_get_hw(uart1)->dr;
+        pg->_uart_baudrate   = next_baud;
+        pg->_framing_errors  = 0;
+        pg->_u8_ixw          = 0;
+        pg->_is_sentence_ready = 0;
+        memset(pg->_pbytebuff, 0, sizeof(pg->_pbytebuff));
+        irq_set_enabled(UART1_IRQ, true);
+    }
 }
 
 void GPStimeDestroy(GPStimeContext **pp)
@@ -57,14 +92,19 @@ void RAM (GPStimeUartRxIsr)()
 		uart_inst_t *puart_id = uart1;
         while (uart_is_readable(puart_id))
         {
-            uint8_t chr = uart_getc(puart_id);
+            uint32_t dr = uart_get_hw(puart_id)->dr;
+            if (dr & UART_UARTDR_FE_BITS)
+                spGPStimeContext->_framing_errors++;
+            uint8_t chr = (uint8_t)(dr & UART_UARTDR_DATA_BITS);
             spGPStimeContext->_pbytebuff[spGPStimeContext->_u8_ixw++] = chr;
+            if (spGPStimeContext->_u8_ixw >= sizeof(spGPStimeContext->_pbytebuff) - 1)
+                spGPStimeContext->_u8_ixw = 0; // overlong sentence — reset to avoid buffer overflow
             if ('\n' == chr)
 			{
 				spGPStimeContext->_pbytebuff[spGPStimeContext->_u8_ixw]=0;//null terminates
 				spGPStimeContext->_is_sentence_ready =1;
 				break;
-			}            
+			}
         }
 		
 	   if(spGPStimeContext->_is_sentence_ready)
@@ -73,12 +113,39 @@ void RAM (GPStimeUartRxIsr)()
 				
 			spGPStimeContext->_u8_ixw = 0;     
 														if ((spGPStimeContext->verbosity>=8)&&(spGPStimeContext->user_setup_menu_active==0 ))  printf("dump ALL RAW FIFO: %s",(char *)spGPStimeContext->_pbytebuff);           
-														if (spGPStimeContext->Optional_Debug&(1<<0)) printf("%s",(char *)spGPStimeContext->_pbytebuff);    //zeroeth bit in optional debug dumps all GPS       
+														if (spGPStimeContext->Optional_Debug&(1<<0)) {
+									strncpy((char*)spGPStimeContext->_debug_print_buff,(char*)spGPStimeContext->_pbytebuff,sizeof(spGPStimeContext->_debug_print_buff)-1);
+									spGPStimeContext->_debug_print_buff[sizeof(spGPStimeContext->_debug_print_buff)-1]=0;
+									spGPStimeContext->_debug_print_pending=1;
+								}
 														
             spGPStimeContext->_is_sentence_ready =0;
 			spGPStimeContext->_i32_error_count -= parse_GPS_data(spGPStimeContext);
         }
     }
+}
+
+/// @brief Extracts field N (1-based, where 1 is the sentence type like "$GPRMC")
+/// from a NMEA sentence into a null-terminated string. Returns true if non-empty.
+static bool get_nmea_field_str(const char *line, int n, char *out, int out_len)
+{
+    char buf[256];
+    strncpy(buf, line, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    char *rest = buf;
+    char *token;
+    int fn = 0;
+    while ((token = strsep(&rest, ",")) != NULL) {
+        if (++fn == n) {
+            strncpy(out, token, out_len - 1);
+            out[out_len - 1] = '\0';
+            // strip checksum suffix (*XX) if present
+            char *star = strchr(out, '*');
+            if (star) *star = '\0';
+            return out[0] != '\0';
+        }
+    }
+    return false;
 }
 
 /// @brief Processes a NMEA sentence GxRMC.
@@ -113,14 +180,27 @@ bool get_8th_field_as_float(const char *line, double *out_val) {
 //***************************************************************************
 int parse_GPS_data(GPStimeContext *pg)
 {                                               //"$GxRMC has time, locations, altitude and sat count! unlike $xxGGA it does NOT have date, but so what
-    uint8_t *prmc = (uint8_t *)strnstr((char *)pg->_pbytebuff, "$GNGGA,", sizeof(pg->_pbytebuff));
+    uint8_t *prmc  = (uint8_t *)strnstr((char *)pg->_pbytebuff, "$GNGGA,", sizeof(pg->_pbytebuff));
+    if (!prmc)  prmc  = (uint8_t *)strnstr((char *)pg->_pbytebuff, "$GPGGA,", sizeof(pg->_pbytebuff));
+    if (!prmc)  prmc  = (uint8_t *)strnstr((char *)pg->_pbytebuff, "$NGGA,",  sizeof(pg->_pbytebuff));
     uint8_t *gnrmc = (uint8_t *)strnstr((char *)pg->_pbytebuff, "$GNRMC,", sizeof(pg->_pbytebuff));
+    if (!gnrmc) gnrmc = (uint8_t *)strnstr((char *)pg->_pbytebuff, "$GPRMC,", sizeof(pg->_pbytebuff));
+    if (!gnrmc) gnrmc = (uint8_t *)strnstr((char *)pg->_pbytebuff, "$NRMC,",  sizeof(pg->_pbytebuff));
     
 	if(gnrmc)
     {
-			double speed; // = (float) strtod( (const char *)prmc + u8ixcollector[5],NULL);  //fyi this is a much cleaner way to extract value. quits parsing at comma automatically			
-			get_8th_field_as_float(gnrmc, &speed);
-			pg->_time_data.knots = speed/2;
+			double speed;
+			get_8th_field_as_float((const char *)gnrmc, &speed);
+			pg->_time_data.knots = speed / 2;
+
+			// RMC field 10 (1-based) = date as DDMMYY
+			char date_str[8] = {0};
+			if (get_nmea_field_str((const char *)gnrmc, 10, date_str, sizeof(date_str))
+			    && strlen(date_str) >= 6) {
+				pg->_time_data.day   = (date_str[0]-'0')*10 + (date_str[1]-'0');
+				pg->_time_data.month = (date_str[2]-'0')*10 + (date_str[3]-'0');
+				pg->_time_data.year  = (date_str[4]-'0')*10 + (date_str[5]-'0');
+			}
 	}
 	
 	if(prmc)
@@ -194,6 +274,33 @@ int parse_GPS_data(GPStimeContext *pg)
 		  //printf("GPS Latitude:%lld Longtitude:%lld\n", pg->_time_data._i64_lat_100k, pg->_time_data._i64_lon_100k);		
 		
 		}
+    }
+
+    // GSV sentences: field 4 (1-based) = total sats in view for that constellation.
+    // Each constellation sends its own sentence type; we pick up whichever one
+    // arrived in this buffer and update the matching counter, then recompute the sum.
+    {
+        const char *pfx[5] = {"$GPGSV,", "$GLGSV,", "$GAGSV,", "$GBGSV,", "$GQGSV,"};
+        uint8_t    *cnt[5] = {
+            &pg->_time_data.sats_gps,
+            &pg->_time_data.sats_glonass,
+            &pg->_time_data.sats_galileo,
+            &pg->_time_data.sats_beidou,
+            &pg->_time_data.sats_qzss,
+        };
+        for (int g = 0; g < 5; g++) {
+            const char *p = strnstr((const char *)pg->_pbytebuff, pfx[g], sizeof(pg->_pbytebuff));
+            if (p) {
+                char f4[8] = {0};
+                if (get_nmea_field_str(p, 4, f4, sizeof(f4)))
+                    *cnt[g] = (uint8_t)atoi(f4);
+                pg->_time_data.sats_in_view =
+                    pg->_time_data.sats_gps      + pg->_time_data.sats_glonass +
+                    pg->_time_data.sats_galileo  + pg->_time_data.sats_beidou  +
+                    pg->_time_data.sats_qzss;
+                break;
+            }
+        }
     }
 
     return 0;
